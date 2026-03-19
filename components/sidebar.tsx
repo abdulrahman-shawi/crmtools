@@ -11,7 +11,20 @@ import {
   UserCog,
   CalendarDays,
   Wallet,
-  BriefcaseBusiness
+  BriefcaseBusiness,
+  Building2,
+  Boxes,
+  Activity,
+  Tags,
+  ClipboardList,
+  Receipt,
+  WalletCards,
+  Warehouse,
+  Truck,
+  FileSpreadsheet,
+  Undo2,
+  KanbanSquare,
+  ListTodo
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -131,6 +144,25 @@ export const Sidebar = ({ isCollapsed, setIsCollapsed }: { isCollapsed: boolean;
         { icon: UserCog, label: "الخدمة الذاتية", href: "/dashboard/hr/self-service" },
         { icon: Download, label: "التنبيهات", href: "/dashboard/hr/notifications" },
       ].filter(isMenuItem),
+    },
+    {
+      group: "CRM متقدم",
+      items: [
+        { icon: LayoutGrid, label: "نظرة عامة CRM", href: "/dashboard/crm-enterprise" },
+        { icon: Building2, label: "إضافة العملاء", href: "/dashboard/crm-enterprise/customers" },
+        { icon: Boxes, label: "إضافة المنتجات", href: "/dashboard/crm-enterprise/products" },
+        { icon: Activity, label: "حالة العملاء", href: "/dashboard/crm-enterprise/customer-status" },
+        { icon: Tags, label: "التصنيفات", href: "/dashboard/crm-enterprise/categories" },
+        { icon: ClipboardList, label: "الطلبات", href: "/dashboard/crm-enterprise/orders" },
+        { icon: Receipt, label: "المصاريف", href: "/dashboard/crm-enterprise/expenses" },
+        { icon: WalletCards, label: "حركة الصندوق", href: "/dashboard/crm-enterprise/cash-movements" },
+        { icon: Warehouse, label: "المخازن", href: "/dashboard/crm-enterprise/warehouses" },
+        { icon: Truck, label: "شركات الشحن", href: "/dashboard/crm-enterprise/shipping-companies" },
+        { icon: FileSpreadsheet, label: "الفواتير", href: "/dashboard/crm-enterprise/invoices" },
+        { icon: KanbanSquare, label: "الفرص البيعية", href: "/dashboard/crm-enterprise/opportunities" },
+        { icon: Undo2, label: "المرتجعات", href: "/dashboard/crm-enterprise/returns" },
+        { icon: ListTodo, label: "مهام الفرق", href: "/dashboard/crm-enterprise/tasks" },
+      ],
     },
   ].filter(group => group.items.length > 0) : [];
 
