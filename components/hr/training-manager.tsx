@@ -8,7 +8,15 @@ import { Button } from "@/components/ui/button";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import DynamicCard from "@/components/ui/dynamicCard";
 import { SectionHeader } from "@/components/ui/section-header";
-import type { TrainingEnrollment, TrainingProgram } from "@/lib/types/hr";
+import type { HrCandidate, HrEmployee, TrainingEnrollment, TrainingProgram } from "@/lib/types/hr";
+import { useAuth } from "@/context/AuthContext";
+import { can, RBAC_PERMISSIONS } from "@/lib/rbac";
+
+interface TrainingParticipantOption {
+  id: string;
+  label: string;
+  type: "employee" | "trainee";
+}
 
 interface TrainingFormState {
   title: string;
@@ -18,7 +26,7 @@ interface TrainingFormState {
   instructor: string;
   startDate: string;
   status: TrainingProgram["status"];
-  enrolledCount: string;
+  attendeeIds: string[];
 }
 
 const initialTrainingForm: TrainingFormState = {
@@ -29,19 +37,32 @@ const initialTrainingForm: TrainingFormState = {
   instructor: "",
   startDate: "",
   status: "not-started",
-  enrolledCount: "0",
+  attendeeIds: [],
 };
 
 interface TrainingManagerProps {
   initialPrograms: TrainingProgram[];
   initialEnrollments: TrainingEnrollment[];
+  employees: HrEmployee[];
+  trainees: HrCandidate[];
 }
 
 /**
  * Manages training programs with add/edit/delete operations.
  */
-export function TrainingManager({ initialPrograms, initialEnrollments }: TrainingManagerProps) {
+export function TrainingManager({ initialPrograms, initialEnrollments, employees, trainees }: TrainingManagerProps) {
+  const { user } = useAuth();
   const [programs, setPrograms] = useState<TrainingProgram[]>(initialPrograms);
+  const [programAttendees, setProgramAttendees] = useState<Record<string, string[]>>(
+    Object.fromEntries(
+      initialPrograms.map((program) => [
+        program.id,
+        initialEnrollments
+          .filter((enrollment) => enrollment.programId === program.id)
+          .map((enrollment) => enrollment.employeeId),
+      ])
+    )
+  );
   const [page, setPage] = useState(1);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -74,10 +95,34 @@ export function TrainingManager({ initialPrograms, initialEnrollments }: Trainin
     };
   }, [programs, initialEnrollments]);
 
+  const canCreateProgram = can(user, RBAC_PERMISSIONS.trainingCreate);
+  const canEditProgram = can(user, RBAC_PERMISSIONS.trainingEdit);
+  const canDeleteProgram = can(user, RBAC_PERMISSIONS.trainingDelete);
+
+  const participantOptions = useMemo<TrainingParticipantOption[]>(
+    () => [
+      ...employees.map((employee) => ({
+        id: employee.id,
+        label: `${employee.fullName} - ${employee.jobTitle}`,
+        type: "employee" as const,
+      })),
+      ...trainees.map((trainee) => ({
+        id: trainee.id,
+        label: `${trainee.fullName} - ${trainee.role}`,
+        type: "trainee" as const,
+      })),
+    ],
+    [employees, trainees]
+  );
+
   /**
    * Opens create modal for training program.
    */
   function openCreateModal() {
+    if (!canCreateProgram) {
+      toast.error("لا تملك صلاحية إضافة برنامج");
+      return;
+    }
     setEditingId(null);
     setFormState(initialTrainingForm);
     setIsModalOpen(true);
@@ -87,6 +132,10 @@ export function TrainingManager({ initialPrograms, initialEnrollments }: Trainin
    * Opens edit modal with selected program data.
    */
   function openEditModal(program: TrainingProgram) {
+    if (!canEditProgram) {
+      toast.error("لا تملك صلاحية تعديل البرنامج");
+      return;
+    }
     setEditingId(program.id);
     setFormState({
       title: program.title,
@@ -96,7 +145,7 @@ export function TrainingManager({ initialPrograms, initialEnrollments }: Trainin
       instructor: program.instructor,
       startDate: program.startDate,
       status: program.status,
-      enrolledCount: String(program.enrolledCount),
+      attendeeIds: programAttendees[program.id] ?? [],
     });
     setIsModalOpen(true);
   }
@@ -110,11 +159,12 @@ export function TrainingManager({ initialPrograms, initialEnrollments }: Trainin
       return;
     }
 
-    const enrolledCount = Number(formState.enrolledCount);
-    if (Number.isNaN(enrolledCount) || enrolledCount < 0) {
-      toast.error("عدد الملتحقين غير صحيح");
+    if (formState.attendeeIds.length === 0) {
+      toast.error("يرجى اختيار موظف أو متدرب واحد على الأقل");
       return;
     }
+
+    const enrolledCount = formState.attendeeIds.length;
 
     if (editingId) {
       setPrograms((prev) =>
@@ -134,10 +184,12 @@ export function TrainingManager({ initialPrograms, initialEnrollments }: Trainin
             : program
         )
       );
+      setProgramAttendees((prev) => ({ ...prev, [editingId]: formState.attendeeIds }));
       toast.success("تم تعديل برنامج التدريب");
     } else {
+      const newProgramId = `train_${Date.now()}`;
       const newProgram: TrainingProgram = {
-        id: `train_${Date.now()}`,
+        id: newProgramId,
         title: formState.title.trim(),
         description: formState.description.trim() || "-",
         category: formState.category,
@@ -149,6 +201,7 @@ export function TrainingManager({ initialPrograms, initialEnrollments }: Trainin
       };
 
       setPrograms((prev) => [newProgram, ...prev]);
+      setProgramAttendees((prev) => ({ ...prev, [newProgramId]: formState.attendeeIds }));
       toast.success("تمت إضافة برنامج تدريب");
     }
 
@@ -161,11 +214,32 @@ export function TrainingManager({ initialPrograms, initialEnrollments }: Trainin
    * Deletes selected training program.
    */
   function handleDelete(program: TrainingProgram) {
+    if (!canDeleteProgram) {
+      toast.error("لا تملك صلاحية حذف البرنامج");
+      return;
+    }
     const confirmed = window.confirm(`هل تريد حذف البرنامج ${program.title}؟`);
     if (!confirmed) return;
 
     setPrograms((prev) => prev.filter((item) => item.id !== program.id));
+    setProgramAttendees((prev) => {
+      const next = { ...prev };
+      delete next[program.id];
+      return next;
+    });
     toast.success("تم حذف برنامج التدريب");
+  }
+
+  /**
+   * Toggles one attendee selection inside the training form.
+   */
+  function toggleAttendee(attendeeId: string) {
+    setFormState((prev) => ({
+      ...prev,
+      attendeeIds: prev.attendeeIds.includes(attendeeId)
+        ? prev.attendeeIds.filter((id) => id !== attendeeId)
+        : [...prev.attendeeIds, attendeeId],
+    }));
   }
 
   const columns: Column<TrainingProgram>[] = [
@@ -182,7 +256,21 @@ export function TrainingManager({ initialPrograms, initialEnrollments }: Trainin
     { header: "المدرب", accessor: "instructor" },
     { header: "المدة", accessor: "duration" },
     { header: "تاريخ البدء", accessor: "startDate" },
-    { header: "الملتحقين", accessor: (row) => String(row.enrolledCount) },
+    {
+      header: "الحضور",
+      accessor: (row) => {
+        const attendeeNames = (programAttendees[row.id] ?? [])
+          .map((attendeeId) => participantOptions.find((option) => option.id === attendeeId)?.label)
+          .filter(Boolean) as string[];
+
+        return (
+          <div className="max-w-[260px] space-y-1">
+            <p className="font-semibold text-slate-900">{attendeeNames.length} مشارك</p>
+            <p className="truncate text-xs text-slate-500">{attendeeNames.join("، ") || "لا يوجد"}</p>
+          </div>
+        );
+      },
+    },
     {
       header: "الحالة",
       accessor: (row) => {
@@ -199,6 +287,7 @@ export function TrainingManager({ initialPrograms, initialEnrollments }: Trainin
       accessor: (row) => (
         <div className="flex items-center gap-1">
           <button
+            disabled={!canEditProgram}
             onClick={() => openEditModal(row)}
             className="rounded-md border border-slate-200 p-1.5 text-slate-700 hover:bg-slate-50"
             title="تعديل"
@@ -206,6 +295,7 @@ export function TrainingManager({ initialPrograms, initialEnrollments }: Trainin
             <Pencil className="h-4 w-4" />
           </button>
           <button
+            disabled={!canDeleteProgram}
             onClick={() => handleDelete(row)}
             className="rounded-md border border-red-200 p-1.5 text-red-700 hover:bg-red-50"
             title="حذف"
@@ -224,9 +314,11 @@ export function TrainingManager({ initialPrograms, initialEnrollments }: Trainin
         title="التدريب والتطوير"
         description="برامج التدريب والتطوير الوظيفي للموظفين."
       >
-        <Button leftIcon={<Plus className="h-4 w-4" />} onClick={openCreateModal}>
-          إضافة برنامج
-        </Button>
+        {canCreateProgram && (
+          <Button leftIcon={<Plus className="h-4 w-4" />} onClick={openCreateModal}>
+            إضافة برنامج
+          </Button>
+        )}
       </SectionHeader>
 
       <div className="grid gap-4 md:grid-cols-4">
@@ -267,6 +359,9 @@ export function TrainingManager({ initialPrograms, initialEnrollments }: Trainin
             totalCount={programs.length}
             currentPage={page}
             onPageChange={setPage}
+            getRowSearchText={(prog) =>
+              `${categoryLabel[prog.category]} ${statusLabel[prog.status].label} ${prog.title} ${prog.instructor} ${prog.description}`
+            }
           />
         </DynamicCard.Content>
       </DynamicCard>
@@ -339,14 +434,24 @@ export function TrainingManager({ initialPrograms, initialEnrollments }: Trainin
             value={formState.startDate}
             onChange={(e) => setFormState((prev) => ({ ...prev, startDate: e.target.value }))}
           />
-          <input
-            type="number"
-            min={0}
-            className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
-            placeholder="عدد الملتحقين"
-            value={formState.enrolledCount}
-            onChange={(e) => setFormState((prev) => ({ ...prev, enrolledCount: e.target.value }))}
-          />
+          <div className="rounded-lg border border-slate-200 p-3 text-sm md:col-span-2">
+            <p className="mb-3 font-semibold text-slate-700">اختر من سيحضر التدريب</p>
+            <div className="grid max-h-56 grid-cols-1 gap-2 overflow-y-auto md:grid-cols-2">
+              {participantOptions.map((option) => (
+                <label key={option.id} className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2">
+                  <input
+                    type="checkbox"
+                    checked={formState.attendeeIds.includes(option.id)}
+                    onChange={() => toggleAttendee(option.id)}
+                  />
+                  <span className="text-sm text-slate-700">{option.label}</span>
+                  <span className="mr-auto rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500">
+                    {option.type === "employee" ? "موظف" : "متدرب"}
+                  </span>
+                </label>
+              ))}
+            </div>
+          </div>
         </div>
       </AppModal>
     </section>

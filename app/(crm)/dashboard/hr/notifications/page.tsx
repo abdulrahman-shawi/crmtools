@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { Bell, AlertCircle, Cake, Award, CheckCircle, X } from "lucide-react";
+import { useMemo, useRef, useState } from "react";
+import { Bell, AlertCircle, Cake, Award, CheckCircle, Download, Search, Upload, X } from "lucide-react";
 import toast from "react-hot-toast";
 import DynamicCard from "@/components/ui/dynamicCard";
 import { SectionHeader } from "@/components/ui/section-header";
@@ -13,6 +13,8 @@ import { smartNotifications } from "@/lib/data/mock-hr";
 export default function HrNotificationsPage() {
   const [notifications, setNotifications] = useState(smartNotifications);
   const [filter, setFilter] = useState<string>("all");
+  const [searchQuery, setSearchQuery] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const markAsRead = (id: string) => {
     setNotifications((prev) =>
@@ -31,12 +33,126 @@ export default function HrNotificationsPage() {
   };
 
   const unreadCount = notifications.filter((n) => !n.read).length;
-  const filteredNotifications =
-    filter === "all"
-      ? notifications
-      : filter === "unread"
-      ? notifications.filter((n) => !n.read)
-      : notifications.filter((n) => n.type === filter);
+  const filteredNotifications = useMemo(() => {
+    const baseList =
+      filter === "all"
+        ? notifications
+        : filter === "unread"
+        ? notifications.filter((n) => !n.read)
+        : notifications.filter((n) => n.type === filter);
+
+    if (!searchQuery.trim()) return baseList;
+    const q = searchQuery.toLowerCase();
+    return baseList.filter((item) => JSON.stringify(item).toLowerCase().includes(q));
+  }, [notifications, filter, searchQuery]);
+
+  const toCsv = (rows: Record<string, unknown>[]) => {
+    if (!rows.length) return "";
+    const headers = Object.keys(rows[0]);
+    const lines = rows.map((row) =>
+      headers.map((header) => `"${String(row[header] ?? "").replace(/"/g, '""')}"`).join(",")
+    );
+    return [headers.join(","), ...lines].join("\n");
+  };
+
+  const downloadTextFile = (content: string, fileName: string, mimeType: string) => {
+    const blob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = fileName;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const exportJson = () => {
+    downloadTextFile(JSON.stringify(filteredNotifications, null, 2), "notifications.json", "application/json;charset=utf-8");
+    toast.success("تم تصدير JSON");
+  };
+
+  const exportExcel = () => {
+    const csv = toCsv(filteredNotifications as unknown as Record<string, unknown>[]);
+    if (!csv) {
+      toast.error("لا توجد بيانات للتصدير");
+      return;
+    }
+    downloadTextFile(`\uFEFF${csv}`, "notifications.xls", "application/vnd.ms-excel;charset=utf-8");
+    toast.success("تم تصدير Excel");
+  };
+
+  const exportPdf = () => {
+    const win = window.open("", "_blank", "width=1024,height=768");
+    if (!win) {
+      toast.error("تعذر فتح نافذة PDF");
+      return;
+    }
+
+    win.document.write(`
+      <html><body dir=\"rtl\" style=\"font-family:Arial;padding:20px\">
+        <h2>Notifications</h2>
+        <pre style=\"white-space:pre-wrap;background:#f8f8f8;padding:12px;border:1px solid #ddd\">${JSON.stringify(filteredNotifications, null, 2)}</pre>
+      </body></html>
+    `);
+    win.document.close();
+    win.focus();
+    win.print();
+    toast.success("تم فتح تصدير PDF");
+  };
+
+  const importData = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    try {
+      const text = await file.text();
+      const lowerName = file.name.toLowerCase();
+
+      if (lowerName.endsWith(".json")) {
+        const parsed = JSON.parse(text);
+        if (Array.isArray(parsed)) {
+          setNotifications(parsed);
+          toast.success("تم استيراد JSON");
+          return;
+        }
+      }
+
+      if (lowerName.endsWith(".csv") || lowerName.endsWith(".xls") || lowerName.endsWith(".xlsx")) {
+        const lines = text.replace(/^\uFEFF/, "").split(/\r?\n/).filter(Boolean);
+        const headers = lines[0].split(",").map((h) => h.replace(/^"|"$/g, "").trim());
+        const rows = lines.slice(1).map((line) => {
+          const values = line.split(",").map((v) => v.replace(/^"|"$/g, "").trim());
+          const row: Record<string, string> = {};
+          headers.forEach((header, index) => {
+            row[header] = values[index] ?? "";
+          });
+          return row;
+        });
+
+        setNotifications(
+          rows.map((row) => ({
+            id: row.id || `notif_${Date.now()}`,
+            type: (row.type as typeof smartNotifications[number]["type"]) || "announcement",
+            employeeId: row.employeeId || undefined,
+            title: row.title || "",
+            message: row.message || "",
+            severity: (row.severity as typeof smartNotifications[number]["severity"]) || "info",
+            createdAt: row.createdAt || new Date().toISOString().slice(0, 10),
+            read: row.read === "true",
+            actionUrl: row.actionUrl || undefined,
+          }))
+        );
+        toast.success("تم استيراد Excel");
+        return;
+      }
+
+      toast.error("صيغة الملف غير مدعومة");
+    } catch {
+      toast.error("فشل الاستيراد");
+    }
+  };
 
   const typeConfig: Record<
     string,
@@ -92,6 +208,27 @@ export default function HrNotificationsPage() {
           تعليم الكل كمقروء
         </button>
       </SectionHeader>
+
+      <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-3 md:flex-row md:items-center md:justify-between">
+        <div className="relative w-full md:max-w-sm">
+          <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <input
+            className="h-10 w-full rounded-lg border border-slate-200 pr-9 pl-3 text-sm"
+            placeholder="بحث في الإشعارات..."
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+          />
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <button onClick={exportJson} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold">JSON</button>
+          <button onClick={exportExcel} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold">Excel</button>
+          <button onClick={exportPdf} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold">PDF</button>
+          <input ref={fileInputRef} type="file" className="hidden" accept=".json,.csv,.xls,.xlsx" onChange={importData} />
+          <button onClick={() => fileInputRef.current?.click()} className="inline-flex items-center gap-1 rounded-lg border border-blue-200 px-3 py-2 text-xs font-semibold text-blue-700">
+            <Upload className="h-4 w-4" /> استيراد
+          </button>
+        </div>
+      </div>
 
       {/* Notification Stats */}
       <div className="grid gap-4 md:grid-cols-4">

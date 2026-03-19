@@ -1,13 +1,15 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { AlertCircle, Bell, Download, Pencil, Plus, Trash2 } from "lucide-react";
+import { useMemo, useRef, useState } from "react";
+import { AlertCircle, Bell, Download, Pencil, Plus, Search, Trash2, Upload } from "lucide-react";
 import toast from "react-hot-toast";
 import { AppModal } from "@/components/ui/app-modal";
 import { Button } from "@/components/ui/button";
 import DynamicCard from "@/components/ui/dynamicCard";
 import { SectionHeader } from "@/components/ui/section-header";
 import type { EmployeeDocument, Payslip } from "@/lib/types/hr";
+import { useAuth } from "@/context/AuthContext";
+import { can, RBAC_PERMISSIONS } from "@/lib/rbac";
 
 interface AnnouncementItem {
   id: string;
@@ -68,6 +70,7 @@ export function SelfServiceManager({
   initialDocuments,
   initialAnnouncements,
 }: SelfServiceManagerProps) {
+  const { user } = useAuth();
   const [announcements, setAnnouncements] = useState<AnnouncementItem[]>(initialAnnouncements);
   const [documents, setDocuments] = useState<EmployeeDocument[]>(initialDocuments);
   const [payslips, setPayslips] = useState<Payslip[]>(initialPayslips);
@@ -83,6 +86,8 @@ export function SelfServiceManager({
   const [announcementForm, setAnnouncementForm] = useState<AnnouncementFormState>(initialAnnouncementForm);
   const [documentForm, setDocumentForm] = useState<DocumentFormState>(initialDocumentForm);
   const [payslipForm, setPayslipForm] = useState<PayslipFormState>(initialPayslipForm);
+  const [searchQuery, setSearchQuery] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const docTypeLabel: Record<EmployeeDocument["documentType"], string> = {
     id: "هوية",
@@ -104,10 +109,215 @@ export function SelfServiceManager({
   const expiredDocs = useMemo(() => documents.filter((d) => d.status === "expired"), [documents]);
   const expiringDocs = useMemo(() => documents.filter((d) => d.status === "expiring-soon"), [documents]);
 
+  const canManageAnnouncements = can(user, RBAC_PERMISSIONS.announcementsManage);
+  const canManageDocuments = can(user, RBAC_PERMISSIONS.documentsManage);
+  const canManagePayslips = can(user, RBAC_PERMISSIONS.payslipsManage);
+  const canSearchData = can(user, RBAC_PERMISSIONS.dataSearch);
+  const canExportData = can(user, RBAC_PERMISSIONS.dataExport);
+  const canImportData = can(user, RBAC_PERMISSIONS.dataImport);
+
+  const filteredAnnouncements = useMemo(() => {
+    if (!canSearchData || !searchQuery.trim()) return announcements;
+    const q = searchQuery.toLowerCase();
+    return announcements.filter((item) => JSON.stringify(item).toLowerCase().includes(q));
+  }, [announcements, canSearchData, searchQuery]);
+
+  const filteredDocuments = useMemo(() => {
+    if (!canSearchData || !searchQuery.trim()) return documents;
+    const q = searchQuery.toLowerCase();
+    return documents.filter((item) => JSON.stringify(item).toLowerCase().includes(q));
+  }, [documents, canSearchData, searchQuery]);
+
+  const filteredPayslips = useMemo(() => {
+    if (!canSearchData || !searchQuery.trim()) return payslips;
+    const q = searchQuery.toLowerCase();
+    return payslips.filter((item) => JSON.stringify(item).toLowerCase().includes(q));
+  }, [payslips, canSearchData, searchQuery]);
+
+  /**
+   * Converts list of records to CSV string.
+   */
+  function toCsv(records: Record<string, unknown>[]) {
+    if (!records.length) return "";
+    const headers = Object.keys(records[0]);
+    const escapeCell = (value: unknown) => `"${String(value ?? "").replace(/"/g, '""')}"`;
+    const lines = records.map((record) => headers.map((header) => escapeCell(record[header])).join(","));
+    return [headers.join(","), ...lines].join("\n");
+  }
+
+  /**
+   * Downloads a text payload as file.
+   */
+  function downloadTextFile(content: string, fileName: string, mimeType: string) {
+    const blob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = fileName;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  /**
+   * Exports self-service datasets as JSON.
+   */
+  function exportJson() {
+    const payload = {
+      announcements,
+      documents,
+      payslips,
+    };
+    downloadTextFile(JSON.stringify(payload, null, 2), "self-service.json", "application/json;charset=utf-8");
+    toast.success("تم تصدير JSON");
+  }
+
+  /**
+   * Exports flattened self-service data as Excel-compatible CSV.
+   */
+  function exportExcel() {
+    const rows: Record<string, unknown>[] = [
+      ...announcements.map((item) => ({ section: "announcements", ...item })),
+      ...documents.map((item) => ({ section: "documents", ...item })),
+      ...payslips.map((item) => ({ section: "payslips", ...item })),
+    ];
+
+    const csv = toCsv(rows);
+    if (!csv) {
+      toast.error("لا توجد بيانات للتصدير");
+      return;
+    }
+
+    downloadTextFile(`\uFEFF${csv}`, "self-service.xls", "application/vnd.ms-excel;charset=utf-8");
+    toast.success("تم تصدير Excel");
+  }
+
+  /**
+   * Prints all self-service data as a PDF-friendly page.
+   */
+  function exportPdf() {
+    const windowRef = window.open("", "_blank", "width=1024,height=768");
+    if (!windowRef) {
+      toast.error("تعذر فتح نافذة PDF");
+      return;
+    }
+
+    const block = (title: string, records: unknown[]) => `
+      <h3>${title}</h3>
+      <pre style="background:#f8f8f8;padding:12px;border:1px solid #ddd;white-space:pre-wrap">${JSON.stringify(records, null, 2)}</pre>
+    `;
+
+    windowRef.document.write(`
+      <html>
+        <body dir="rtl" style="font-family:Arial;padding:20px">
+          <h2>Self Service Data</h2>
+          ${block("Announcements", announcements)}
+          ${block("Documents", documents)}
+          ${block("Payslips", payslips)}
+        </body>
+      </html>
+    `);
+    windowRef.document.close();
+    windowRef.focus();
+    windowRef.print();
+    toast.success("تم فتح تصدير PDF");
+  }
+
+  /**
+   * Imports JSON or CSV/XLS payload and updates page datasets.
+   */
+  async function importData(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    const text = await file.text();
+    try {
+      const lowerName = file.name.toLowerCase();
+
+      if (lowerName.endsWith(".json")) {
+        const parsed = JSON.parse(text) as {
+          announcements?: AnnouncementItem[];
+          documents?: EmployeeDocument[];
+          payslips?: Payslip[];
+        };
+
+        if (Array.isArray(parsed.announcements)) setAnnouncements(parsed.announcements);
+        if (Array.isArray(parsed.documents)) setDocuments(parsed.documents);
+        if (Array.isArray(parsed.payslips)) setPayslips(parsed.payslips);
+        toast.success("تم استيراد البيانات");
+        return;
+      }
+
+      if (lowerName.endsWith(".csv") || lowerName.endsWith(".xls") || lowerName.endsWith(".xlsx")) {
+        const lines = text.replace(/^\uFEFF/, "").split(/\r?\n/).filter(Boolean);
+        if (lines.length < 2) {
+          toast.error("ملف Excel فارغ");
+          return;
+        }
+
+        const headers = lines[0].split(",").map((header) => header.replace(/^"|"$/g, "").trim());
+        const rows = lines.slice(1).map((line) => {
+          const values = line.split(",").map((value) => value.replace(/^"|"$/g, "").trim());
+          const row: Record<string, string> = {};
+          headers.forEach((header, index) => {
+            row[header] = values[index] ?? "";
+          });
+          return row;
+        });
+
+        const importedAnnouncements = rows
+          .filter((row) => row.section === "announcements")
+          .map((row) => ({
+            id: row.id || `announce_${Date.now()}`,
+            title: row.title || "",
+            message: row.message || "",
+            date: row.date || "",
+          }));
+
+        const importedDocuments = rows
+          .filter((row) => row.section === "documents")
+          .map((row) => ({
+            id: row.id || `doc_${Date.now()}`,
+            employeeId: row.employeeId || "emp_001",
+            documentType: (row.documentType as EmployeeDocument["documentType"]) || "other",
+            expiryDate: row.expiryDate || "",
+            status: (row.status as EmployeeDocument["status"]) || "valid",
+          }));
+
+        const importedPayslips = rows
+          .filter((row) => row.section === "payslips")
+          .map((row) => ({
+            id: row.id || `slip_${Date.now()}`,
+            employeeId: row.employeeId || "emp_001",
+            month: row.month || "",
+            generatedDate: row.generatedDate || "",
+            url: row.url || "",
+          }));
+
+        if (importedAnnouncements.length) setAnnouncements(importedAnnouncements);
+        if (importedDocuments.length) setDocuments(importedDocuments);
+        if (importedPayslips.length) setPayslips(importedPayslips);
+
+        toast.success("تم استيراد بيانات Excel");
+        return;
+      }
+
+      toast.error("صيغة الملف غير مدعومة");
+    } catch {
+      toast.error("فشل استيراد الملف");
+    }
+  }
+
   /**
    * Opens announcement create modal.
    */
   function openCreateAnnouncement() {
+    if (!canManageAnnouncements) {
+      toast.error("لا تملك صلاحية إدارة الإعلانات");
+      return;
+    }
     setEditingAnnouncementId(null);
     setAnnouncementForm(initialAnnouncementForm);
     setAnnouncementModal(true);
@@ -117,6 +327,10 @@ export function SelfServiceManager({
    * Opens announcement edit modal.
    */
   function openEditAnnouncement(item: AnnouncementItem) {
+    if (!canManageAnnouncements) {
+      toast.error("لا تملك صلاحية إدارة الإعلانات");
+      return;
+    }
     setEditingAnnouncementId(item.id);
     setAnnouncementForm({
       title: item.title,
@@ -130,6 +344,10 @@ export function SelfServiceManager({
    * Saves announcement data.
    */
   function saveAnnouncement() {
+    if (!canManageAnnouncements) {
+      toast.error("لا تملك صلاحية إدارة الإعلانات");
+      return;
+    }
     if (!announcementForm.title.trim() || !announcementForm.message.trim() || !announcementForm.date) {
       toast.error("يرجى تعبئة بيانات الإعلان");
       return;
@@ -171,6 +389,10 @@ export function SelfServiceManager({
    * Deletes announcement.
    */
   function deleteAnnouncement(item: AnnouncementItem) {
+    if (!canManageAnnouncements) {
+      toast.error("لا تملك صلاحية إدارة الإعلانات");
+      return;
+    }
     const confirmed = window.confirm(`هل تريد حذف الإعلان ${item.title}؟`);
     if (!confirmed) return;
 
@@ -182,6 +404,10 @@ export function SelfServiceManager({
    * Opens document create modal.
    */
   function openCreateDocument() {
+    if (!canManageDocuments) {
+      toast.error("لا تملك صلاحية إدارة الوثائق");
+      return;
+    }
     setEditingDocumentId(null);
     setDocumentForm(initialDocumentForm);
     setDocumentModal(true);
@@ -191,6 +417,10 @@ export function SelfServiceManager({
    * Opens document edit modal.
    */
   function openEditDocument(item: EmployeeDocument) {
+    if (!canManageDocuments) {
+      toast.error("لا تملك صلاحية إدارة الوثائق");
+      return;
+    }
     setEditingDocumentId(item.id);
     setDocumentForm({
       documentType: item.documentType,
@@ -204,6 +434,10 @@ export function SelfServiceManager({
    * Saves document data.
    */
   function saveDocument() {
+    if (!canManageDocuments) {
+      toast.error("لا تملك صلاحية إدارة الوثائق");
+      return;
+    }
     if (!documentForm.expiryDate) {
       toast.error("يرجى إدخال تاريخ الانتهاء");
       return;
@@ -246,6 +480,10 @@ export function SelfServiceManager({
    * Deletes document entry.
    */
   function deleteDocument(item: EmployeeDocument) {
+    if (!canManageDocuments) {
+      toast.error("لا تملك صلاحية إدارة الوثائق");
+      return;
+    }
     const confirmed = window.confirm("هل تريد حذف هذه الوثيقة؟");
     if (!confirmed) return;
 
@@ -257,6 +495,10 @@ export function SelfServiceManager({
    * Opens payslip create modal.
    */
   function openCreatePayslip() {
+    if (!canManagePayslips) {
+      toast.error("لا تملك صلاحية إدارة القسائم");
+      return;
+    }
     setEditingPayslipId(null);
     setPayslipForm(initialPayslipForm);
     setPayslipModal(true);
@@ -266,6 +508,10 @@ export function SelfServiceManager({
    * Opens payslip edit modal.
    */
   function openEditPayslip(item: Payslip) {
+    if (!canManagePayslips) {
+      toast.error("لا تملك صلاحية إدارة القسائم");
+      return;
+    }
     setEditingPayslipId(item.id);
     setPayslipForm({
       employeeId: item.employeeId,
@@ -280,6 +526,10 @@ export function SelfServiceManager({
    * Saves payslip data.
    */
   function savePayslip() {
+    if (!canManagePayslips) {
+      toast.error("لا تملك صلاحية إدارة القسائم");
+      return;
+    }
     if (!payslipForm.month.trim() || !payslipForm.generatedDate || !payslipForm.url.trim()) {
       toast.error("يرجى تعبئة بيانات القسيمة");
       return;
@@ -323,6 +573,10 @@ export function SelfServiceManager({
    * Deletes payslip entry.
    */
   function deletePayslip(item: Payslip) {
+    if (!canManagePayslips) {
+      toast.error("لا تملك صلاحية إدارة القسائم");
+      return;
+    }
     const confirmed = window.confirm(`هل تريد حذف قسيمة ${item.month}؟`);
     if (!confirmed) return;
 
@@ -338,18 +592,65 @@ export function SelfServiceManager({
         description="تحميل القسائم، تحديث البيانات، والإعلانات الداخلية."
       />
 
+      {(canSearchData || canExportData || canImportData) && (
+        <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-3 md:flex-row md:items-center md:justify-between">
+          {canSearchData ? (
+            <div className="relative w-full md:max-w-sm">
+              <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                className="h-10 w-full rounded-lg border border-slate-200 pr-9 pl-3 text-sm"
+                placeholder="بحث داخل الصفحة..."
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+              />
+            </div>
+          ) : (
+            <div />
+          )}
+
+          <div className="flex flex-wrap items-center gap-2">
+            {canExportData && (
+              <>
+                <button onClick={exportJson} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold">
+                  JSON
+                </button>
+                <button onClick={exportExcel} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold">
+                  Excel
+                </button>
+                <button onClick={exportPdf} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold">
+                  PDF
+                </button>
+              </>
+            )}
+            {canImportData && (
+              <>
+                <input ref={fileInputRef} type="file" className="hidden" accept=".json,.csv,.xls,.xlsx" onChange={importData} />
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="inline-flex items-center gap-1 rounded-lg border border-blue-200 px-3 py-2 text-xs font-semibold text-blue-700"
+                >
+                  <Upload className="h-4 w-4" /> استيراد
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
       <div>
         <div className="mb-3 flex items-center justify-between">
           <h3 className="flex items-center gap-2 text-lg font-bold text-slate-900">
             <Bell className="h-5 w-5 text-blue-600" />
             إعلانات الشركة
           </h3>
-          <Button size="sm" leftIcon={<Plus className="h-4 w-4" />} onClick={openCreateAnnouncement}>
-            إضافة إعلان
-          </Button>
+          {canManageAnnouncements && (
+            <Button size="sm" leftIcon={<Plus className="h-4 w-4" />} onClick={openCreateAnnouncement}>
+              إضافة إعلان
+            </Button>
+          )}
         </div>
         <div className="space-y-3">
-          {announcements.map((announcement) => (
+          {filteredAnnouncements.map((announcement) => (
             <DynamicCard key={announcement.id} className="border-l-4 border-l-blue-500 bg-blue-50/50">
               <DynamicCard.Content className="flex items-start justify-between gap-4 py-3">
                 <div className="space-y-1">
@@ -357,22 +658,24 @@ export function SelfServiceManager({
                   <p className="text-sm text-slate-600">{announcement.message}</p>
                   <p className="text-xs text-slate-500">{announcement.date}</p>
                 </div>
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => openEditAnnouncement(announcement)}
-                    className="rounded-md border border-slate-200 p-1.5 text-slate-700 hover:bg-slate-50"
-                    title="تعديل"
-                  >
-                    <Pencil className="h-4 w-4" />
-                  </button>
-                  <button
-                    onClick={() => deleteAnnouncement(announcement)}
-                    className="rounded-md border border-red-200 p-1.5 text-red-700 hover:bg-red-50"
-                    title="حذف"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </div>
+                {canManageAnnouncements && (
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => openEditAnnouncement(announcement)}
+                      className="rounded-md border border-slate-200 p-1.5 text-slate-700 hover:bg-slate-50"
+                      title="تعديل"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={() => deleteAnnouncement(announcement)}
+                      className="rounded-md border border-red-200 p-1.5 text-red-700 hover:bg-red-50"
+                      title="حذف"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                )}
               </DynamicCard.Content>
             </DynamicCard>
           ))}
@@ -406,12 +709,14 @@ export function SelfServiceManager({
       <div>
         <div className="mb-3 flex items-center justify-between">
           <h3 className="text-lg font-bold text-slate-900">قسائم الراتب</h3>
+          {canManagePayslips && (
           <Button size="sm" leftIcon={<Plus className="h-4 w-4" />} onClick={openCreatePayslip}>
             إضافة قسيمة
           </Button>
+          )}
         </div>
         <div className="grid gap-3 lg:grid-cols-2">
-          {payslips.map((payslip) => (
+          {filteredPayslips.map((payslip) => (
             <DynamicCard key={payslip.id} className="transition-all hover:shadow-md">
               <DynamicCard.Content className="flex items-center justify-between gap-3 py-3">
                 <div>
@@ -427,6 +732,7 @@ export function SelfServiceManager({
                     <Download className="h-4 w-4" />
                     تحميل
                   </a>
+                  {canManagePayslips && (
                   <button
                     onClick={() => openEditPayslip(payslip)}
                     className="rounded-md border border-slate-200 p-1.5 text-slate-700 hover:bg-slate-50"
@@ -434,6 +740,8 @@ export function SelfServiceManager({
                   >
                     <Pencil className="h-4 w-4" />
                   </button>
+                  )}
+                  {canManagePayslips && (
                   <button
                     onClick={() => deletePayslip(payslip)}
                     className="rounded-md border border-red-200 p-1.5 text-red-700 hover:bg-red-50"
@@ -441,6 +749,7 @@ export function SelfServiceManager({
                   >
                     <Trash2 className="h-4 w-4" />
                   </button>
+                  )}
                 </div>
               </DynamicCard.Content>
             </DynamicCard>
@@ -451,12 +760,14 @@ export function SelfServiceManager({
       <div>
         <div className="mb-3 flex items-center justify-between">
           <h3 className="text-lg font-bold text-slate-900">الوثائق الشخصية</h3>
+          {canManageDocuments && (
           <Button size="sm" leftIcon={<Plus className="h-4 w-4" />} onClick={openCreateDocument}>
             إضافة وثيقة
           </Button>
+          )}
         </div>
         <div className="space-y-2">
-          {documents.map((doc) => {
+          {filteredDocuments.map((doc) => {
             const status = statusInfo[doc.status];
             return (
               <DynamicCard key={doc.id} className={`border-l-4 ${status.color}`}>
@@ -467,6 +778,7 @@ export function SelfServiceManager({
                     </p>
                     <p className="text-xs text-slate-600">ينتهي: {doc.expiryDate} ({status.label})</p>
                   </div>
+                  {canManageDocuments && (
                   <div className="flex items-center gap-1">
                     <button
                       onClick={() => openEditDocument(doc)}
@@ -483,6 +795,7 @@ export function SelfServiceManager({
                       <Trash2 className="h-4 w-4" />
                     </button>
                   </div>
+                  )}
                 </DynamicCard.Content>
               </DynamicCard>
             );

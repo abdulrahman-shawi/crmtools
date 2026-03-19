@@ -8,10 +8,12 @@ import { Button } from "@/components/ui/button";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import DynamicCard from "@/components/ui/dynamicCard";
 import { SectionHeader } from "@/components/ui/section-header";
-import type { LeaveBalance, LeaveRequest } from "@/lib/types/hr";
+import type { HrEmployee, LeaveBalance, LeaveRequest } from "@/lib/types/hr";
+import { useAuth } from "@/context/AuthContext";
+import { can, RBAC_PERMISSIONS } from "@/lib/rbac";
 
 interface LeaveFormState {
-  employeeName: string;
+  employeeId: string;
   leaveType: LeaveRequest["leaveType"];
   startDate: string;
   endDate: string;
@@ -19,7 +21,7 @@ interface LeaveFormState {
 }
 
 const initialFormState: LeaveFormState = {
-  employeeName: "",
+  employeeId: "",
   leaveType: "annual",
   startDate: "",
   endDate: "",
@@ -29,12 +31,14 @@ const initialFormState: LeaveFormState = {
 interface LeavesManagerProps {
   initialRequests: LeaveRequest[];
   initialBalances: LeaveBalance[];
+  employees: HrEmployee[];
 }
 
 /**
  * Manages leave requests CRUD with approve/reject actions.
  */
-export function LeavesManager({ initialRequests, initialBalances }: LeavesManagerProps) {
+export function LeavesManager({ initialRequests, initialBalances, employees }: LeavesManagerProps) {
+  const { user } = useAuth();
   const [requests, setRequests] = useState<LeaveRequest[]>(initialRequests);
   const [page, setPage] = useState(1);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -61,6 +65,11 @@ export function LeavesManager({ initialRequests, initialBalances }: LeavesManage
     return { totalRequests, pendingRequests, approvedRequests };
   }, [requests]);
 
+  const canCreateLeave = can(user, RBAC_PERMISSIONS.leavesCreate);
+  const canEditLeave = can(user, RBAC_PERMISSIONS.leavesEdit);
+  const canDeleteLeave = can(user, RBAC_PERMISSIONS.leavesDelete);
+  const canApproveLeave = can(user, RBAC_PERMISSIONS.leavesApprove);
+
   /**
    * Calculates leave days between two dates.
    */
@@ -75,6 +84,10 @@ export function LeavesManager({ initialRequests, initialBalances }: LeavesManage
    * Opens modal for creating a leave request.
    */
   function openCreateModal() {
+    if (!canCreateLeave) {
+      toast.error("لا تملك صلاحية إضافة إجازة");
+      return;
+    }
     setEditingId(null);
     setFormState(initialFormState);
     setIsModalOpen(true);
@@ -84,9 +97,13 @@ export function LeavesManager({ initialRequests, initialBalances }: LeavesManage
    * Opens modal for editing existing leave request.
    */
   function openEditModal(request: LeaveRequest) {
+    if (!canEditLeave) {
+      toast.error("لا تملك صلاحية تعديل الإجازة");
+      return;
+    }
     setEditingId(request.id);
     setFormState({
-      employeeName: request.employeeName,
+      employeeId: request.employeeId,
       leaveType: request.leaveType,
       startDate: request.startDate,
       endDate: request.endDate,
@@ -99,8 +116,14 @@ export function LeavesManager({ initialRequests, initialBalances }: LeavesManage
    * Saves create or edit operation in local state.
    */
   function handleSave() {
-    if (!formState.employeeName.trim() || !formState.startDate || !formState.endDate) {
+    if (!formState.employeeId || !formState.startDate || !formState.endDate) {
       toast.error("يرجى تعبئة الحقول الأساسية");
+      return;
+    }
+
+    const selectedEmployee = employees.find((employee) => employee.id === formState.employeeId);
+    if (!selectedEmployee) {
+      toast.error("يرجى اختيار موظف صحيح");
       return;
     }
 
@@ -116,7 +139,8 @@ export function LeavesManager({ initialRequests, initialBalances }: LeavesManage
           request.id === editingId
             ? {
                 ...request,
-                employeeName: formState.employeeName.trim(),
+              employeeId: selectedEmployee.id,
+              employeeName: selectedEmployee.fullName,
                 leaveType: formState.leaveType,
                 startDate: formState.startDate,
                 endDate: formState.endDate,
@@ -130,8 +154,8 @@ export function LeavesManager({ initialRequests, initialBalances }: LeavesManage
     } else {
       const newRequest: LeaveRequest = {
         id: `leave_${Date.now()}`,
-        employeeId: `emp_${Date.now()}`,
-        employeeName: formState.employeeName.trim(),
+        employeeId: selectedEmployee.id,
+        employeeName: selectedEmployee.fullName,
         leaveType: formState.leaveType,
         startDate: formState.startDate,
         endDate: formState.endDate,
@@ -153,6 +177,10 @@ export function LeavesManager({ initialRequests, initialBalances }: LeavesManage
    * Deletes leave request from local state.
    */
   function handleDelete(request: LeaveRequest) {
+    if (!canDeleteLeave) {
+      toast.error("لا تملك صلاحية حذف الإجازة");
+      return;
+    }
     const confirmed = window.confirm(`هل تريد حذف طلب ${request.employeeName}؟`);
     if (!confirmed) return;
 
@@ -164,6 +192,10 @@ export function LeavesManager({ initialRequests, initialBalances }: LeavesManage
    * Approves leave request.
    */
   function handleApprove(id: string) {
+    if (!canApproveLeave) {
+      toast.error("لا تملك صلاحية الموافقة على الإجازة");
+      return;
+    }
     setRequests((prev) =>
       prev.map((request) =>
         request.id === id
@@ -183,6 +215,10 @@ export function LeavesManager({ initialRequests, initialBalances }: LeavesManage
    * Rejects leave request.
    */
   function handleReject(id: string) {
+    if (!canApproveLeave) {
+      toast.error("لا تملك صلاحية رفض الإجازة");
+      return;
+    }
     setRequests((prev) =>
       prev.map((request) =>
         request.id === id
@@ -221,36 +257,44 @@ export function LeavesManager({ initialRequests, initialBalances }: LeavesManage
         <div className="flex items-center gap-1">
           {row.status === "pending" && (
             <>
-              <button
+              {canApproveLeave && (
+                <button
                 onClick={() => handleApprove(row.id)}
                 className="rounded-md border border-green-200 p-1.5 text-green-700 hover:bg-green-50"
                 title="موافقة"
               >
                 <Check className="h-4 w-4" />
               </button>
-              <button
+              )}
+              {canApproveLeave && (
+                <button
                 onClick={() => handleReject(row.id)}
                 className="rounded-md border border-red-200 p-1.5 text-red-700 hover:bg-red-50"
                 title="رفض"
               >
                 <X className="h-4 w-4" />
               </button>
+              )}
             </>
           )}
-          <button
+          {canEditLeave && (
+            <button
             onClick={() => openEditModal(row)}
             className="rounded-md border border-slate-200 p-1.5 text-slate-700 hover:bg-slate-50"
             title="تعديل"
           >
             <Pencil className="h-4 w-4" />
           </button>
-          <button
+          )}
+          {canDeleteLeave && (
+            <button
             onClick={() => handleDelete(row)}
             className="rounded-md border border-red-200 p-1.5 text-red-700 hover:bg-red-50"
             title="حذف"
           >
             <Trash2 className="h-4 w-4" />
           </button>
+          )}
         </div>
       ),
     },
@@ -263,9 +307,11 @@ export function LeavesManager({ initialRequests, initialBalances }: LeavesManage
         title="إدارة الإجازات"
         description="عرض طلبات الإجازة والأرصدة المتاحة لكل موظف."
       >
-        <Button leftIcon={<Plus className="h-4 w-4" />} onClick={openCreateModal}>
-          إضافة إجازة
-        </Button>
+        {canCreateLeave && (
+          <Button leftIcon={<Plus className="h-4 w-4" />} onClick={openCreateModal}>
+            إضافة إجازة
+          </Button>
+        )}
       </SectionHeader>
 
       <div className="grid gap-4 lg:grid-cols-4">
@@ -347,12 +393,18 @@ export function LeavesManager({ initialRequests, initialBalances }: LeavesManage
         }
       >
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          <input
+          <select
             className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
-            placeholder="اسم الموظف"
-            value={formState.employeeName}
-            onChange={(e) => setFormState((prev) => ({ ...prev, employeeName: e.target.value }))}
-          />
+            value={formState.employeeId}
+            onChange={(e) => setFormState((prev) => ({ ...prev, employeeId: e.target.value }))}
+          >
+            <option value="">اختر الموظف</option>
+            {employees.map((employee) => (
+              <option key={employee.id} value={employee.id}>
+                {employee.fullName} - {employee.jobTitle}
+              </option>
+            ))}
+          </select>
           <select
             className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
             value={formState.leaveType}

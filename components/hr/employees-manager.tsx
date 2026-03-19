@@ -8,6 +8,7 @@ import { AppModal } from "@/components/ui/app-modal";
 import { Button } from "@/components/ui/button";
 import { SectionHeader } from "@/components/ui/section-header";
 import type { HrEmployee } from "@/lib/types/hr";
+import { useAuth } from "@/context/AuthContext";
 
 interface EmployeeFormState {
   fullName: string;
@@ -31,15 +32,24 @@ const initialFormState: EmployeeFormState = {
  * Handles employees CRUD interactions with local mock state.
  */
 export function EmployeesManager({ initialData }: { initialData: HrEmployee[] }) {
+  const { user } = useAuth();
   const [employees, setEmployees] = useState<HrEmployee[]>(initialData);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingEmployeeId, setEditingEmployeeId] = useState<string | null>(null);
   const [formState, setFormState] = useState<EmployeeFormState>(initialFormState);
 
+  const canCreateEmployee = Boolean(user?.role === "admin" || user?.permissions?.includes("addEmployees") || user?.permissions?.includes("viewEmployees"));
+  const canEditEmployee = Boolean(user?.role === "admin" || user?.permissions?.includes("editEmployees") || user?.permissions?.includes("viewEmployees"));
+  const canDeleteEmployee = Boolean(user?.role === "admin" || user?.permissions?.includes("deleteEmployees"));
+
   /**
    * Opens add employee modal.
    */
   const openCreateModal = () => {
+    if (!canCreateEmployee) {
+      toast.error("لا تملك صلاحية إضافة موظف");
+      return;
+    }
     setEditingEmployeeId(null);
     setFormState(initialFormState);
     setIsModalOpen(true);
@@ -49,6 +59,11 @@ export function EmployeesManager({ initialData }: { initialData: HrEmployee[] })
    * Opens edit modal with selected employee data.
    */
   const openEditModal = (employee: HrEmployee) => {
+    if (!canEditEmployee) {
+      toast.error("لا تملك صلاحية تعديل الموظفين");
+      return;
+    }
+
     setEditingEmployeeId(employee.id);
     setFormState({
       fullName: employee.fullName,
@@ -118,6 +133,11 @@ export function EmployeesManager({ initialData }: { initialData: HrEmployee[] })
    * Deletes employee after confirmation.
    */
   const handleDelete = (employee: HrEmployee) => {
+    if (!canDeleteEmployee) {
+      toast.error("لا تملك صلاحية حذف الموظفين");
+      return;
+    }
+
     const confirmed = window.confirm(`هل تريد حذف الموظف ${employee.fullName}؟`);
     if (!confirmed) return;
 
@@ -132,12 +152,18 @@ export function EmployeesManager({ initialData }: { initialData: HrEmployee[] })
         title="الموظفون"
         description="إدارة بيانات الموظفين، الأقسام، حالات التوظيف، والرواتب الأساسية."
       >
-        <Button leftIcon={<UserPlus className="h-4 w-4" />} onClick={openCreateModal}>
-          إضافة موظف
-        </Button>
+        {canCreateEmployee && (
+          <Button leftIcon={<UserPlus className="h-4 w-4" />} onClick={openCreateModal}>
+            إضافة موظف
+          </Button>
+        )}
       </SectionHeader>
 
-      <EmployeesTable data={employees} onEdit={openEditModal} onDelete={handleDelete} />
+      <EmployeesTable
+        data={employees}
+        onEdit={canEditEmployee ? openEditModal : undefined}
+        onDelete={canDeleteEmployee ? handleDelete : undefined}
+      />
 
       <AppModal
         isOpen={isModalOpen}

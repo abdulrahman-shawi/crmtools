@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { SectionHeader } from "@/components/ui/section-header";
 import { getTenantPlan } from "@/lib/services/subscription.service";
 import type { Customer, Tenant } from "@/lib/types/crm";
+import { useAuth } from "@/context/AuthContext";
 
 interface CustomerFormState {
   name: string;
@@ -32,13 +33,17 @@ const initialFormState: CustomerFormState = {
  * Handles customers CRUD interactions with in-memory mock data.
  */
 export function CustomersManager({ initialData, tenant }: { initialData: Customer[]; tenant: Tenant }) {
+  const { user } = useAuth();
   const [customers, setCustomers] = useState<Customer[]>(initialData);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCustomerId, setEditingCustomerId] = useState<string | null>(null);
   const [formState, setFormState] = useState<CustomerFormState>(initialFormState);
 
   const plan = useMemo(() => getTenantPlan(tenant), [tenant]);
-  const canAdd = customers.length < plan.limits.maxCustomers;
+  const hasCreatePermission = Boolean(user?.role === "admin" || user?.permissions?.includes("addCustomers"));
+  const hasEditPermission = Boolean(user?.role === "admin" || user?.permissions?.includes("editCustomers"));
+  const hasDeletePermission = Boolean(user?.role === "admin" || user?.permissions?.includes("deleteCustomers"));
+  const canAdd = customers.length < plan.limits.maxCustomers && hasCreatePermission;
 
   /**
    * Opens modal for creating a new customer.
@@ -58,6 +63,11 @@ export function CustomersManager({ initialData, tenant }: { initialData: Custome
    * Opens modal with current customer values for editing.
    */
   const openEditModal = (customer: Customer) => {
+    if (!hasEditPermission) {
+      toast.error("لا تملك صلاحية تعديل العملاء");
+      return;
+    }
+
     setEditingCustomerId(customer.id);
     setFormState({
       name: customer.name,
@@ -127,6 +137,11 @@ export function CustomersManager({ initialData, tenant }: { initialData: Custome
    * Deletes customer record after confirmation.
    */
   const handleDelete = (customer: Customer) => {
+    if (!hasDeletePermission) {
+      toast.error("لا تملك صلاحية حذف العملاء");
+      return;
+    }
+
     const confirmed = window.confirm(`هل تريد حذف العميل ${customer.name}؟`);
     if (!confirmed) return;
 
@@ -151,7 +166,11 @@ export function CustomersManager({ initialData, tenant }: { initialData: Custome
         </Button>
       </SectionHeader>
 
-      <CustomersTable data={customers} onEdit={openEditModal} onDelete={handleDelete} />
+      <CustomersTable
+        data={customers}
+        onEdit={hasEditPermission ? openEditModal : undefined}
+        onDelete={hasDeletePermission ? handleDelete : undefined}
+      />
 
       <AppModal
         isOpen={isModalOpen}
