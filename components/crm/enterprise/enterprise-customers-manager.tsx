@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { MessageSquareText, Pencil, Plus, ReceiptText, Search, Trash2 } from "lucide-react";
+import { Eye, MessageSquareText, Pencil, Plus, ReceiptText, Search, Share2, Trash2 } from "lucide-react";
 import toast from "react-hot-toast";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { AppModal } from "@/components/ui/app-modal";
@@ -138,6 +138,12 @@ const paymentStatusLabel: Record<"unpaid" | "partial" | "paid", { label: string;
   unpaid: { label: "غير مدفوعة", color: "bg-red-50 text-red-700" },
   partial: { label: "مدفوعة جزئياً", color: "bg-yellow-50 text-yellow-700" },
   paid: { label: "مدفوعة", color: "bg-emerald-50 text-emerald-700" },
+};
+
+const orderStatusLabel: Record<SalesOrder["status"], { label: string; color: string }> = {
+  new: { label: "جديد", color: "bg-blue-50 text-blue-700" },
+  processing: { label: "قيد التنفيذ", color: "bg-yellow-50 text-yellow-700" },
+  completed: { label: "مكتمل", color: "bg-emerald-50 text-emerald-700" },
 };
 
 const initialFormState: CustomerFormState = {
@@ -343,6 +349,8 @@ export function EnterpriseCustomersManager() {
   const [salesOrders, setSalesOrders] = useState<SalesOrder[]>(initialSalesOrders);
   const [isCustomerHistoryModalOpen, setIsCustomerHistoryModalOpen] = useState(false);
   const [historyCustomerId, setHistoryCustomerId] = useState<string | null>(null);
+  const [previewInvoiceId, setPreviewInvoiceId] = useState<string | null>(null);
+  const [isInvoicePreviewModalOpen, setIsInvoicePreviewModalOpen] = useState(false);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -438,6 +446,11 @@ export function EnterpriseCustomersManager() {
   const customerHistoryOrders = useMemo(
     () => salesOrders.filter((order) => order.customerId === historyCustomerId),
     [salesOrders, historyCustomerId]
+  );
+
+  const previewInvoice = useMemo(
+    () => salesInvoices.find((invoice) => invoice.id === previewInvoiceId) ?? null,
+    [salesInvoices, previewInvoiceId]
   );
 
   const totals = useMemo(() => {
@@ -588,6 +601,46 @@ export function EnterpriseCustomersManager() {
   function openCustomerHistoryModal(customer: EnterpriseCustomer) {
     setHistoryCustomerId(customer.id);
     setIsCustomerHistoryModalOpen(true);
+  }
+
+  /**
+   * Opens invoice preview modal from customer history list.
+   */
+  function openInvoicePreview(invoiceId: string) {
+    setPreviewInvoiceId(invoiceId);
+    setIsInvoicePreviewModalOpen(true);
+  }
+
+  /**
+   * Shares invoice link using Web Share API with clipboard fallback.
+   */
+  async function shareInvoice(invoiceId: string) {
+    const shareUrl = `${window.location.origin}/dashboard/crm-enterprise/invoices/${invoiceId}`;
+
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: "مشاركة فاتورة",
+          text: "تفاصيل فاتورة العميل",
+          url: shareUrl,
+        });
+      } else {
+        await navigator.clipboard.writeText(shareUrl);
+        toast.success("تم نسخ رابط الفاتورة");
+      }
+    } catch {
+      toast.error("تعذر مشاركة الفاتورة");
+    }
+  }
+
+  /**
+   * Updates order status directly from customer history list.
+   */
+  function updateOrderStatus(orderId: string, status: SalesOrder["status"]) {
+    setSalesOrders((prev) =>
+      prev.map((order) => (order.id === orderId ? { ...order, status } : order))
+    );
+    toast.success("تم تحديث حالة الطلب");
   }
 
   /**
@@ -1250,12 +1303,13 @@ export function EnterpriseCustomersManager() {
                 {customerHistoryInvoices.map((invoice) => (
                   <div key={invoice.id} className="rounded-lg border border-slate-100 bg-slate-50 p-3">
                     <div className="mb-1 flex items-center justify-between text-xs text-slate-600">
-                      <Link
-                        href={`/dashboard/crm-enterprise/invoices/${invoice.id}`}
+                      <button
+                        type="button"
+                        onClick={() => openInvoicePreview(invoice.id)}
                         className="font-semibold text-blue-700 hover:underline"
                       >
                         {invoice.invoiceNo}
-                      </Link>
+                      </button>
                       <span>{invoice.date}</span>
                     </div>
                     <p className="text-sm text-slate-700">عدد البنود: {invoice.items.length}</p>
@@ -1267,6 +1321,28 @@ export function EnterpriseCustomersManager() {
                       {`الفرعي ${invoice.subtotal.toLocaleString()} - خصم ${invoice.discountAmount.toLocaleString()} + ضريبة ${invoice.taxAmount.toLocaleString()}`}
                     </p>
                     <p className="text-sm font-semibold text-emerald-700">{invoice.total.toLocaleString()} ر.س</p>
+                    <div className="mt-2 flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => openInvoicePreview(invoice.id)}
+                        className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-700 hover:bg-slate-100"
+                      >
+                        <Eye className="h-3.5 w-3.5" /> عرض المحتوى
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => shareInvoice(invoice.id)}
+                        className="inline-flex items-center gap-1 rounded-md border border-blue-200 px-2 py-1 text-xs text-blue-700 hover:bg-blue-50"
+                      >
+                        <Share2 className="h-3.5 w-3.5" /> مشاركة
+                      </button>
+                      <Link
+                        href={`/dashboard/crm-enterprise/invoices/${invoice.id}`}
+                        className="inline-flex items-center gap-1 rounded-md border border-emerald-200 px-2 py-1 text-xs text-emerald-700 hover:bg-emerald-50"
+                      >
+                        فتح الصفحة
+                      </Link>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -1287,12 +1363,94 @@ export function EnterpriseCustomersManager() {
                     </div>
                     <p className="text-sm text-slate-700">إجمالي القطع: {order.itemCount}</p>
                     <p className="text-sm font-semibold text-blue-700">{order.total.toLocaleString()} ر.س</p>
+                    <div className="mt-2 flex items-center justify-between gap-2">
+                      <span className={`inline-block rounded-full px-2 py-1 text-xs font-semibold ${orderStatusLabel[order.status].color}`}>
+                        {orderStatusLabel[order.status].label}
+                      </span>
+                      <select
+                        className="h-8 rounded-md border border-slate-200 px-2 text-xs"
+                        value={order.status}
+                        onChange={(event) => updateOrderStatus(order.id, event.target.value as SalesOrder["status"])}
+                      >
+                        <option value="new">جديد</option>
+                        <option value="processing">قيد التنفيذ</option>
+                        <option value="completed">مكتمل</option>
+                      </select>
+                    </div>
                   </div>
                 ))}
               </div>
             )}
           </div>
         </div>
+      </AppModal>
+
+      <AppModal
+        isOpen={isInvoicePreviewModalOpen}
+        onClose={() => setIsInvoicePreviewModalOpen(false)}
+        title={previewInvoice ? `محتوى الفاتورة ${previewInvoice.invoiceNo}` : "محتوى الفاتورة"}
+        size="xl"
+        footer={
+          <>
+            {previewInvoice && (
+              <Button variant="outline" onClick={() => shareInvoice(previewInvoice.id)}>
+                مشاركة الفاتورة
+              </Button>
+            )}
+            <Button variant="outline" onClick={() => setIsInvoicePreviewModalOpen(false)}>
+              إغلاق
+            </Button>
+          </>
+        }
+      >
+        {previewInvoice ? (
+          <div className="space-y-3">
+            <div className="grid gap-2 rounded-lg border border-slate-200 p-3 text-sm md:grid-cols-2">
+              <p>العميل: <span className="font-semibold">{previewInvoice.customerName}</span></p>
+              <p>التاريخ: <span className="font-semibold">{previewInvoice.date}</span></p>
+              <p>طريقة الدفع: <span className="font-semibold">{paymentMethodLabel[previewInvoice.paymentMethod]}</span></p>
+              <p>حالة الدفع: <span className="font-semibold">{paymentStatusLabel[previewInvoice.paymentStatus].label}</span></p>
+            </div>
+
+            <div className="overflow-x-auto rounded-xl border border-slate-200">
+              <table className="min-w-full text-sm">
+                <thead className="bg-slate-50">
+                  <tr>
+                    <th className="p-3 text-right font-semibold text-slate-700">المنتج</th>
+                    <th className="p-3 text-right font-semibold text-slate-700">SKU</th>
+                    <th className="p-3 text-right font-semibold text-slate-700">الكمية</th>
+                    <th className="p-3 text-right font-semibold text-slate-700">السعر</th>
+                    <th className="p-3 text-right font-semibold text-slate-700">الإجمالي</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {previewInvoice.items.map((item) => (
+                    <tr key={item.id} className="border-t border-slate-100">
+                      <td className="p-3 text-slate-800">{item.name}</td>
+                      <td className="p-3 text-slate-600">{item.sku}</td>
+                      <td className="p-3 text-slate-600">{item.quantity}</td>
+                      <td className="p-3 text-slate-600">{item.price.toLocaleString()} ر.س</td>
+                      <td className="p-3 font-semibold text-slate-900">{(item.price * item.quantity).toLocaleString()} ر.س</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700 md:max-w-md">
+              <p>الفرعي</p>
+              <p className="text-left">{previewInvoice.subtotal.toLocaleString()} ر.س</p>
+              <p>الخصم</p>
+              <p className="text-left">- {previewInvoice.discountAmount.toLocaleString()} ر.س</p>
+              <p>الضريبة ({previewInvoice.taxRate}%)</p>
+              <p className="text-left">+ {previewInvoice.taxAmount.toLocaleString()} ر.س</p>
+              <p className="font-bold">الإجمالي</p>
+              <p className="text-left font-bold text-emerald-700">{previewInvoice.total.toLocaleString()} ر.س</p>
+            </div>
+          </div>
+        ) : (
+          <p className="text-sm text-slate-500">تعذر تحميل الفاتورة.</p>
+        )}
       </AppModal>
     </section>
   );

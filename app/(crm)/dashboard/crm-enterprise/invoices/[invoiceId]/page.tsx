@@ -235,6 +235,28 @@ export default function InvoiceDetailsPage({ params }: InvoiceDetailsPageProps) 
     window.print();
   }
 
+  /**
+   * Shares current invoice URL using Web Share API or clipboard fallback.
+   */
+  async function shareInvoice() {
+    const shareUrl = window.location.href;
+
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: `فاتورة ${currentInvoice.invoiceNo}`,
+          text: "مشاركة تفاصيل الفاتورة",
+          url: shareUrl,
+        });
+      } else {
+        await navigator.clipboard.writeText(shareUrl);
+        toast.success("تم نسخ رابط الفاتورة");
+      }
+    } catch {
+      toast.error("تعذر مشاركة الفاتورة");
+    }
+  }
+
   if (!isReady) {
     return (
       <section className="space-y-6" dir="rtl">
@@ -269,6 +291,9 @@ export default function InvoiceDetailsPage({ params }: InvoiceDetailsPageProps) 
               <Button variant="outline" onClick={printInvoice}>
                 <Printer className="h-4 w-4" />
                 طباعة
+              </Button>
+              <Button variant="outline" onClick={shareInvoice}>
+                مشاركة الفاتورة
               </Button>
               <Button onClick={startEditing}>
                 <Pencil className="h-4 w-4" />
