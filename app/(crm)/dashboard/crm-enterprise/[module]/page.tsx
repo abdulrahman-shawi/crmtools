@@ -8,17 +8,25 @@ interface CrmEnterpriseModulePageProps {
   };
 }
 
+const dedicatedModuleSlugs = new Set(["customers"]);
+
 /**
  * Generates static params for all CRM enterprise modules.
  */
 export function generateStaticParams() {
-  return crmEnterpriseNavigation.map((item) => ({ module: item.slug }));
+  return crmEnterpriseNavigation
+    .filter((item) => !dedicatedModuleSlugs.has(item.slug))
+    .map((item) => ({ module: item.slug }));
 }
 
 /**
  * Renders selected CRM enterprise module page.
  */
 export default function CrmEnterpriseModulePage({ params }: CrmEnterpriseModulePageProps) {
+  if (dedicatedModuleSlugs.has(params.module)) {
+    notFound();
+  }
+
   const currentModule = crmEnterpriseModules[params.module as keyof typeof crmEnterpriseModules];
 
   if (!currentModule) {
