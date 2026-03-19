@@ -112,9 +112,9 @@ export default function HrRecruitmentPage() {
 
   const toCsv = (rows: HrCandidate[]) => {
     if (!rows.length) return "";
-    const headers = Object.keys(rows[0]);
+    const headers = Object.keys(rows[0]) as Array<keyof HrCandidate>;
     const lines = rows.map((row) =>
-      headers.map((header) => `"${String((row as Record<string, unknown>)[header] ?? "").replace(/"/g, '""')}"`).join(",")
+      headers.map((header) => `"${String(row[header] ?? "").replace(/"/g, '""')}"`).join(",")
     );
     return [headers.join(","), ...lines].join("\n");
   };
