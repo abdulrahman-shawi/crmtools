@@ -374,6 +374,9 @@ export function LeavesManager({ initialRequests, initialBalances, employees }: L
             totalCount={requests.length}
             currentPage={page}
             onPageChange={setPage}
+            getRowSearchText={(request) =>
+              `${leaveTypeLabel[request.leaveType]} ${statusLabel[request.status].label} ${request.employeeName} ${request.reason}`
+            }
           />
         </DynamicCard.Content>
       </DynamicCard>

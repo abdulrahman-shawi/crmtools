@@ -6,6 +6,7 @@ import toast from "react-hot-toast";
 import DynamicCard from "@/components/ui/dynamicCard";
 import { SectionHeader } from "@/components/ui/section-header";
 import { smartNotifications } from "@/lib/data/mock-hr";
+import { matchesSearch } from "@/lib/search";
 
 /**
  * Smart notifications page - system alerts and announcements.
@@ -33,6 +34,19 @@ export default function HrNotificationsPage() {
   };
 
   const unreadCount = notifications.filter((n) => !n.read).length;
+  const typeLabelMap: Record<string, string> = {
+    "document-expiry": "انتهاء الوثائق",
+    birthday: "أعياد الميلاد",
+    "work-anniversary": "ذكريات العمل",
+    "late-checkin": "تنبيهات التأخير",
+    announcement: "الإعلانات",
+  };
+  const severityLabelMap: Record<string, string> = {
+    info: "معلومات",
+    warning: "تحذير",
+    critical: "حرج",
+  };
+
   const filteredNotifications = useMemo(() => {
     const baseList =
       filter === "all"
@@ -42,8 +56,12 @@ export default function HrNotificationsPage() {
         : notifications.filter((n) => n.type === filter);
 
     if (!searchQuery.trim()) return baseList;
-    const q = searchQuery.toLowerCase();
-    return baseList.filter((item) => JSON.stringify(item).toLowerCase().includes(q));
+    return baseList.filter((item) =>
+      matchesSearch(
+        `${JSON.stringify(item)} ${typeLabelMap[item.type] ?? ""} ${severityLabelMap[item.severity] ?? ""}`,
+        searchQuery
+      )
+    );
   }, [notifications, filter, searchQuery]);
 
   const toCsv = (rows: Record<string, unknown>[]) => {

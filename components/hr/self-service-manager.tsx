@@ -10,6 +10,7 @@ import { SectionHeader } from "@/components/ui/section-header";
 import type { EmployeeDocument, Payslip } from "@/lib/types/hr";
 import { useAuth } from "@/context/AuthContext";
 import { can, RBAC_PERMISSIONS } from "@/lib/rbac";
+import { matchesSearch } from "@/lib/search";
 
 interface AnnouncementItem {
   id: string;
@@ -118,20 +119,22 @@ export function SelfServiceManager({
 
   const filteredAnnouncements = useMemo(() => {
     if (!canSearchData || !searchQuery.trim()) return announcements;
-    const q = searchQuery.toLowerCase();
-    return announcements.filter((item) => JSON.stringify(item).toLowerCase().includes(q));
+    return announcements.filter((item) => matchesSearch(JSON.stringify(item), searchQuery));
   }, [announcements, canSearchData, searchQuery]);
 
   const filteredDocuments = useMemo(() => {
     if (!canSearchData || !searchQuery.trim()) return documents;
-    const q = searchQuery.toLowerCase();
-    return documents.filter((item) => JSON.stringify(item).toLowerCase().includes(q));
+    return documents.filter((item) =>
+      matchesSearch(
+        `${JSON.stringify(item)} ${docTypeLabel[item.documentType]} ${statusInfo[item.status].label}`,
+        searchQuery
+      )
+    );
   }, [documents, canSearchData, searchQuery]);
 
   const filteredPayslips = useMemo(() => {
     if (!canSearchData || !searchQuery.trim()) return payslips;
-    const q = searchQuery.toLowerCase();
-    return payslips.filter((item) => JSON.stringify(item).toLowerCase().includes(q));
+    return payslips.filter((item) => matchesSearch(JSON.stringify(item), searchQuery));
   }, [payslips, canSearchData, searchQuery]);
 
   /**

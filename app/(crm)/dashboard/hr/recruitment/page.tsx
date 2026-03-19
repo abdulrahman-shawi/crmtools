@@ -8,6 +8,7 @@ import { AppModal } from "@/components/ui/app-modal";
 import { Button } from "@/components/ui/button";
 import { SectionHeader } from "@/components/ui/section-header";
 import { hrCandidates } from "@/lib/data/mock-hr";
+import { matchesSearch } from "@/lib/search";
 import type { HrCandidate } from "@/lib/types/hr";
 
 const columns: Array<{ key: HrCandidate["stage"]; title: string }> = [
@@ -18,6 +19,13 @@ const columns: Array<{ key: HrCandidate["stage"]; title: string }> = [
 ];
 
 const stageOrder: HrCandidate["stage"][] = ["new", "screening", "interview", "offer"];
+
+const stageLabel: Record<HrCandidate["stage"], string> = {
+  new: "طلبات جديدة",
+  screening: "فرز أولي",
+  interview: "مقابلات",
+  offer: "عروض",
+};
 
 interface CandidateFormState {
   fullName: string;
@@ -96,8 +104,12 @@ export default function HrRecruitmentPage() {
 
   const filteredCandidates = useMemo(() => {
     if (!searchQuery.trim()) return candidates;
-    const q = searchQuery.toLowerCase();
-    return candidates.filter((candidate) => JSON.stringify(candidate).toLowerCase().includes(q));
+    return candidates.filter((candidate) =>
+      matchesSearch(
+        `${JSON.stringify(candidate)} ${stageLabel[candidate.stage]} ${candidate.fullName} ${candidate.role}`,
+        searchQuery
+      )
+    );
   }, [candidates, searchQuery]);
 
   const countsByStage = useMemo(() => {

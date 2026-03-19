@@ -17,6 +17,7 @@ import {
 import { cn } from "@/lib/utils"; // تأكد من وجود هذا المسار في مشروعك
 import { useAuth } from "@/context/AuthContext";
 import { can, RBAC_PERMISSIONS } from "@/lib/rbac";
+import { matchesSearch } from "@/lib/search";
 
 // --- Types ---
 
@@ -76,6 +77,43 @@ export function DataTable<T extends { id: string | number }>({
   enableExport = true,
   getRowSearchText,
 }: DataTableProps<T>) {
+  /**
+   * Extracts plain text from a React node to make rendered labels searchable.
+   */
+  const extractNodeText = (node: React.ReactNode): string => {
+    if (node == null || typeof node === "boolean") return "";
+    if (typeof node === "string" || typeof node === "number") return String(node);
+    if (Array.isArray(node)) return node.map((part) => extractNodeText(part)).join(" ");
+
+    if (React.isValidElement(node)) {
+      const elementType = typeof node.type === "string" ? node.type : "component";
+      if (["button", "input", "select", "option", "textarea", "svg", "path"].includes(elementType)) {
+        return "";
+      }
+
+      const props = node.props as { children?: React.ReactNode };
+      return extractNodeText(props.children);
+    }
+
+    return "";
+  };
+
+  /**
+   * Builds extra searchable text from table columns for one row.
+   */
+  const getColumnSearchText = (item: T): string => {
+    return columns
+      .map((column) => {
+        if (typeof column.accessor === "function") {
+          return extractNodeText(column.accessor(item));
+        }
+
+        const value = item[column.accessor];
+        return value == null ? "" : String(value);
+      })
+      .join(" ");
+  };
+
   const { user } = useAuth();
   const [searchText, setSearchText] = useState("");
   const [importedData, setImportedData] = useState<T[] | null>(null);
@@ -97,13 +135,13 @@ export function DataTable<T extends { id: string | number }>({
       return sourceData;
     }
 
-    const query = searchText.trim().toLowerCase();
     return sourceData.filter((item) => {
-      const rawText = JSON.stringify(item).toLowerCase();
-      const extraText = getRowSearchText ? getRowSearchText(item).toLowerCase() : "";
-      return rawText.includes(query) || extraText.includes(query);
+      const rawText = JSON.stringify(item);
+      const columnText = getColumnSearchText(item);
+      const extraText = getRowSearchText ? getRowSearchText(item) : "";
+      return matchesSearch(`${rawText} ${columnText} ${extraText}`, searchText);
     });
-  }, [sourceData, canSearch, searchText, getRowSearchText]);
+  }, [sourceData, canSearch, searchText, getRowSearchText, columns]);
 
   const effectiveTotal = filteredData.length;
   const totalPages = useMemo(() => Math.ceil(effectiveTotal / pageSize), [effectiveTotal, pageSize]);
