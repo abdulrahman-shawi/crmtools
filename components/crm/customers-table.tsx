@@ -9,7 +9,15 @@ import { formatPhoneForDisplay } from "@/lib/utils";
 /**
  * Renders paginated customers table with lightweight action handlers.
  */
-export function CustomersTable({ data }: { data: Customer[] }) {
+export function CustomersTable({
+  data,
+  onEdit,
+  onDelete,
+}: {
+  data: Customer[];
+  onEdit?: (customer: Customer) => void;
+  onDelete?: (customer: Customer) => void;
+}) {
   const [page, setPage] = useState(1);
 
   const statusLabel: Record<Customer["status"], string> = {
@@ -57,16 +65,16 @@ export function CustomersTable({ data }: { data: Customer[] }) {
       {
         label: "تعديل",
         icon: <Pencil className="h-4 w-4" />,
-        onClick: () => undefined,
+        onClick: (item) => onEdit?.(item),
       },
       {
         label: "حذف",
         icon: <Trash2 className="h-4 w-4" />,
         variant: "danger",
-        onClick: () => undefined,
+        onClick: (item) => onDelete?.(item),
       },
     ],
-    []
+    [onEdit, onDelete]
   );
 
   return (

@@ -2,12 +2,16 @@
 import { useAuth } from "@/context/AuthContext";
 import { hasAnyPermission } from "@/lib/utils";
 import { 
-  Home, BarChart2, Users, ChevronRight, ChevronLeft,
+  BarChart2, Users, ChevronRight, ChevronLeft,
   Download,
   LogOut,
   CreditCard,
   LayoutGrid,
-  TrendingUp
+  TrendingUp,
+  UserCog,
+  CalendarDays,
+  Wallet,
+  BriefcaseBusiness
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -29,7 +33,8 @@ type MenuGroup = {
 /**
  * Narrows filtered menu candidates into concrete MenuItem objects.
  */
-const isMenuItem = (item: MenuItem | false): item is MenuItem => Boolean(item);
+const isMenuItem = (item: MenuItem | false | null | undefined): item is MenuItem => Boolean(item);
+
 
 export const Sidebar = ({ isCollapsed, setIsCollapsed }: { isCollapsed: boolean; setIsCollapsed: (val: boolean) => void }) => {
   const pathname = usePathname();
@@ -111,6 +116,21 @@ export const Sidebar = ({ isCollapsed, setIsCollapsed }: { isCollapsed: boolean;
         { icon: TrendingUp, label: "المبيعات", href: "/dashboard/sales" },
         { icon: CreditCard, label: "الاشتراكات", href: "/dashboard/subscriptions" },
 ].filter(isMenuItem) // هذا السطر هو الأهم: يقوم بحذف أي قيمة false من المصفوفة
+    },
+    {
+      group: "الموارد البشرية",
+      items: [
+        { icon: UserCog, label: "نظرة عامة", href: "/dashboard/hr" },
+        { icon: Users, label: "الموظفون", href: "/dashboard/hr/employees" },
+        { icon: CalendarDays, label: "الحضور", href: "/dashboard/hr/attendance" },
+        { icon: Wallet, label: "الرواتب", href: "/dashboard/hr/payroll" },
+        { icon: BriefcaseBusiness, label: "التوظيف", href: "/dashboard/hr/recruitment" },
+        { icon: CalendarDays, label: "الإجازات", href: "/dashboard/hr/leaves" },
+        { icon: TrendingUp, label: "الأداء", href: "/dashboard/hr/performance" },
+        { icon: Users, label: "التدريب", href: "/dashboard/hr/training" },
+        { icon: UserCog, label: "الخدمة الذاتية", href: "/dashboard/hr/self-service" },
+        { icon: Download, label: "التنبيهات", href: "/dashboard/hr/notifications" },
+      ].filter(isMenuItem),
     },
   ].filter(group => group.items.length > 0) : [];
 
