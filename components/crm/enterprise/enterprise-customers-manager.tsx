@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
 import { MessageSquareText, Pencil, Plus, ReceiptText, Search, Trash2 } from "lucide-react";
 import toast from "react-hot-toast";
 import { DataTable, type Column } from "@/components/shared/DataTable";
@@ -79,6 +80,11 @@ interface SalesInvoice {
   customerId: string;
   customerName: string;
   date: string;
+  paymentMethod: "cash" | "card" | "transfer";
+  subtotal: number;
+  discountAmount: number;
+  taxRate: number;
+  taxAmount: number;
   total: number;
   status: "draft" | "issued";
   items: PosLineItem[];
@@ -94,6 +100,8 @@ interface SalesOrder {
   itemCount: number;
   status: "new" | "processing" | "completed";
 }
+
+const SALES_INVOICES_STORAGE_KEY = "crm-enterprise-sales-invoices";
 
 const sizeLabel: Record<EnterpriseCustomer["companySize"], string> = {
   medium: "متوسطة",
@@ -117,6 +125,12 @@ const channelLabel: Record<CustomerCommunication["channel"], string> = {
   email: "بريد",
   meeting: "اجتماع",
   whatsapp: "واتساب",
+};
+
+const paymentMethodLabel: Record<"cash" | "card" | "transfer", string> = {
+  cash: "نقد",
+  card: "شبكة",
+  transfer: "تحويل",
 };
 
 const initialFormState: CustomerFormState = {
@@ -238,6 +252,11 @@ const initialSalesInvoices: SalesInvoice[] = [
     customerId: "ent_cus_1",
     customerName: "شركة النخبة للتقنية",
     date: "2026-03-12",
+    paymentMethod: "card",
+    subtotal: 4797,
+    discountAmount: 0,
+    taxRate: 0,
+    taxAmount: 0,
     total: 4798,
     status: "issued",
     items: [
@@ -251,6 +270,11 @@ const initialSalesInvoices: SalesInvoice[] = [
     customerId: "ent_cus_2",
     customerName: "مؤسسة رواد الأعمال",
     date: "2026-03-15",
+    paymentMethod: "transfer",
+    subtotal: 1490,
+    discountAmount: 50,
+    taxRate: 24.16,
+    taxAmount: 360,
     total: 1850,
     status: "issued",
     items: [
@@ -302,10 +326,41 @@ export function EnterpriseCustomersManager() {
   const [posCustomerId, setPosCustomerId] = useState<string | null>(null);
   const [productSearch, setProductSearch] = useState("");
   const [posItems, setPosItems] = useState<PosLineItem[]>([]);
+  const [posDiscountAmount, setPosDiscountAmount] = useState("0");
+  const [posTaxRate, setPosTaxRate] = useState("15");
+  const [posPaymentMethod, setPosPaymentMethod] = useState<"cash" | "card" | "transfer">("cash");
   const [salesInvoices, setSalesInvoices] = useState<SalesInvoice[]>(initialSalesInvoices);
   const [salesOrders, setSalesOrders] = useState<SalesOrder[]>(initialSalesOrders);
   const [isCustomerHistoryModalOpen, setIsCustomerHistoryModalOpen] = useState(false);
   const [historyCustomerId, setHistoryCustomerId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    try {
+      const raw = window.localStorage.getItem(SALES_INVOICES_STORAGE_KEY);
+      if (!raw) {
+        return;
+      }
+
+      const parsed = JSON.parse(raw) as SalesInvoice[];
+      if (Array.isArray(parsed)) {
+        setSalesInvoices(parsed);
+      }
+    } catch {
+      // Fallback to in-memory defaults if storage is unavailable.
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    window.localStorage.setItem(SALES_INVOICES_STORAGE_KEY, JSON.stringify(salesInvoices));
+  }, [salesInvoices]);
 
   const activeCustomer = useMemo(
     () => customers.find((customer) => customer.id === activeCustomerId) ?? null,
@@ -342,6 +397,28 @@ export function EnterpriseCustomersManager() {
     () => posItems.reduce((sum, item) => sum + item.price * item.quantity, 0),
     [posItems]
   );
+
+  const posDiscount = useMemo(() => {
+    const numericDiscount = Number(posDiscountAmount || 0);
+    if (Number.isNaN(numericDiscount) || numericDiscount < 0) {
+      return 0;
+    }
+
+    return Math.min(numericDiscount, posSubtotal);
+  }, [posDiscountAmount, posSubtotal]);
+
+  const posTaxableAmount = useMemo(() => Math.max(0, posSubtotal - posDiscount), [posSubtotal, posDiscount]);
+
+  const posTaxValue = useMemo(() => {
+    const numericTaxRate = Number(posTaxRate || 0);
+    if (Number.isNaN(numericTaxRate) || numericTaxRate < 0) {
+      return 0;
+    }
+
+    return (posTaxableAmount * numericTaxRate) / 100;
+  }, [posTaxRate, posTaxableAmount]);
+
+  const posGrandTotal = useMemo(() => posTaxableAmount + posTaxValue, [posTaxableAmount, posTaxValue]);
 
   const customerHistoryInvoices = useMemo(
     () => salesInvoices.filter((invoice) => invoice.customerId === historyCustomerId),
@@ -488,6 +565,9 @@ export function EnterpriseCustomersManager() {
     setPosCustomerId(customer.id);
     setProductSearch("");
     setPosItems([]);
+    setPosDiscountAmount("0");
+    setPosTaxRate("15");
+    setPosPaymentMethod("cash");
     setIsPosModalOpen(true);
   }
 
@@ -563,7 +643,8 @@ export function EnterpriseCustomersManager() {
     const today = now.toISOString().slice(0, 10);
     const invoiceNo = `INV-${now.getTime().toString().slice(-6)}`;
     const orderNo = `SO-${now.getTime().toString().slice(-6)}`;
-    const total = posItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
+    const total = posGrandTotal;
+    const taxRate = Number(posTaxRate || 0);
 
     const invoice: SalesInvoice = {
       id: `invoice_${now.getTime()}`,
@@ -571,6 +652,11 @@ export function EnterpriseCustomersManager() {
       customerId: posCustomer.id,
       customerName: posCustomer.companyName,
       date: today,
+      paymentMethod: posPaymentMethod,
+      subtotal: posSubtotal,
+      discountAmount: posDiscount,
+      taxRate: Number.isNaN(taxRate) ? 0 : taxRate,
+      taxAmount: posTaxValue,
       total,
       status: "issued",
       items: posItems,
@@ -604,6 +690,9 @@ export function EnterpriseCustomersManager() {
     setIsPosModalOpen(false);
     setPosItems([]);
     setProductSearch("");
+    setPosDiscountAmount("0");
+    setPosTaxRate("15");
+    setPosPaymentMethod("cash");
     toast.success(`تم إنشاء ${invoice.invoiceNo} و ${order.orderNo}`);
   }
 
@@ -1060,8 +1149,55 @@ export function EnterpriseCustomersManager() {
             )}
 
             <div className="rounded-lg border border-emerald-100 bg-emerald-50 p-3">
-              <p className="text-sm text-slate-700">الإجمالي</p>
-              <p className="text-2xl font-bold text-emerald-700">{posSubtotal.toLocaleString()} ر.س</p>
+              <div className="grid grid-cols-2 gap-2 text-sm text-slate-700">
+                <p>المجموع الفرعي</p>
+                <p className="text-left">{posSubtotal.toLocaleString()} ر.س</p>
+                <p>الخصم</p>
+                <p className="text-left">- {posDiscount.toLocaleString()} ر.س</p>
+                <p>الضريبة</p>
+                <p className="text-left">+ {posTaxValue.toLocaleString()} ر.س</p>
+              </div>
+              <div className="mt-2 border-t border-emerald-200 pt-2">
+                <p className="text-sm text-slate-700">الإجمالي النهائي</p>
+                <p className="text-2xl font-bold text-emerald-700">{posGrandTotal.toLocaleString()} ر.س</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-2 rounded-lg border border-slate-200 bg-white p-3 md:grid-cols-3">
+              <div>
+                <p className="mb-1 text-xs text-slate-600">الخصم (قيمة)</p>
+                <input
+                  type="number"
+                  min={0}
+                  className="h-9 w-full rounded-lg border border-slate-200 px-2 text-sm"
+                  value={posDiscountAmount}
+                  onChange={(event) => setPosDiscountAmount(event.target.value)}
+                />
+              </div>
+
+              <div>
+                <p className="mb-1 text-xs text-slate-600">الضريبة %</p>
+                <input
+                  type="number"
+                  min={0}
+                  className="h-9 w-full rounded-lg border border-slate-200 px-2 text-sm"
+                  value={posTaxRate}
+                  onChange={(event) => setPosTaxRate(event.target.value)}
+                />
+              </div>
+
+              <div>
+                <p className="mb-1 text-xs text-slate-600">طريقة الدفع</p>
+                <select
+                  className="h-9 w-full rounded-lg border border-slate-200 px-2 text-sm"
+                  value={posPaymentMethod}
+                  onChange={(event) => setPosPaymentMethod(event.target.value as "cash" | "card" | "transfer")}
+                >
+                  <option value="cash">نقد</option>
+                  <option value="card">شبكة</option>
+                  <option value="transfer">تحويل</option>
+                </select>
+              </div>
             </div>
           </div>
         </div>
@@ -1088,10 +1224,19 @@ export function EnterpriseCustomersManager() {
                 {customerHistoryInvoices.map((invoice) => (
                   <div key={invoice.id} className="rounded-lg border border-slate-100 bg-slate-50 p-3">
                     <div className="mb-1 flex items-center justify-between text-xs text-slate-600">
-                      <span>{invoice.invoiceNo}</span>
+                      <Link
+                        href={`/dashboard/crm-enterprise/invoices/${invoice.id}`}
+                        className="font-semibold text-blue-700 hover:underline"
+                      >
+                        {invoice.invoiceNo}
+                      </Link>
                       <span>{invoice.date}</span>
                     </div>
                     <p className="text-sm text-slate-700">عدد البنود: {invoice.items.length}</p>
+                    <p className="text-xs text-slate-600">طريقة الدفع: {paymentMethodLabel[invoice.paymentMethod]}</p>
+                    <p className="text-xs text-slate-600">
+                      {`الفرعي ${invoice.subtotal.toLocaleString()} - خصم ${invoice.discountAmount.toLocaleString()} + ضريبة ${invoice.taxAmount.toLocaleString()}`}
+                    </p>
                     <p className="text-sm font-semibold text-emerald-700">{invoice.total.toLocaleString()} ر.س</p>
                   </div>
                 ))}
