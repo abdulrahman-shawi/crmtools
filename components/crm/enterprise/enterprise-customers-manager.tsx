@@ -81,6 +81,7 @@ interface SalesInvoice {
   customerName: string;
   date: string;
   paymentMethod: "cash" | "card" | "transfer";
+  paymentStatus: "unpaid" | "partial" | "paid";
   subtotal: number;
   discountAmount: number;
   taxRate: number;
@@ -131,6 +132,12 @@ const paymentMethodLabel: Record<"cash" | "card" | "transfer", string> = {
   cash: "نقد",
   card: "شبكة",
   transfer: "تحويل",
+};
+
+const paymentStatusLabel: Record<"unpaid" | "partial" | "paid", { label: string; color: string }> = {
+  unpaid: { label: "غير مدفوعة", color: "bg-red-50 text-red-700" },
+  partial: { label: "مدفوعة جزئياً", color: "bg-yellow-50 text-yellow-700" },
+  paid: { label: "مدفوعة", color: "bg-emerald-50 text-emerald-700" },
 };
 
 const initialFormState: CustomerFormState = {
@@ -253,6 +260,7 @@ const initialSalesInvoices: SalesInvoice[] = [
     customerName: "شركة النخبة للتقنية",
     date: "2026-03-12",
     paymentMethod: "card",
+    paymentStatus: "paid",
     subtotal: 4797,
     discountAmount: 0,
     taxRate: 0,
@@ -271,6 +279,7 @@ const initialSalesInvoices: SalesInvoice[] = [
     customerName: "مؤسسة رواد الأعمال",
     date: "2026-03-15",
     paymentMethod: "transfer",
+    paymentStatus: "partial",
     subtotal: 1490,
     discountAmount: 50,
     taxRate: 24.16,
@@ -329,6 +338,7 @@ export function EnterpriseCustomersManager() {
   const [posDiscountAmount, setPosDiscountAmount] = useState("0");
   const [posTaxRate, setPosTaxRate] = useState("15");
   const [posPaymentMethod, setPosPaymentMethod] = useState<"cash" | "card" | "transfer">("cash");
+  const [posPaymentStatus, setPosPaymentStatus] = useState<"unpaid" | "partial" | "paid">("unpaid");
   const [salesInvoices, setSalesInvoices] = useState<SalesInvoice[]>(initialSalesInvoices);
   const [salesOrders, setSalesOrders] = useState<SalesOrder[]>(initialSalesOrders);
   const [isCustomerHistoryModalOpen, setIsCustomerHistoryModalOpen] = useState(false);
@@ -568,6 +578,7 @@ export function EnterpriseCustomersManager() {
     setPosDiscountAmount("0");
     setPosTaxRate("15");
     setPosPaymentMethod("cash");
+    setPosPaymentStatus("unpaid");
     setIsPosModalOpen(true);
   }
 
@@ -653,6 +664,7 @@ export function EnterpriseCustomersManager() {
       customerName: posCustomer.companyName,
       date: today,
       paymentMethod: posPaymentMethod,
+      paymentStatus: posPaymentStatus,
       subtotal: posSubtotal,
       discountAmount: posDiscount,
       taxRate: Number.isNaN(taxRate) ? 0 : taxRate,
@@ -693,6 +705,7 @@ export function EnterpriseCustomersManager() {
     setPosDiscountAmount("0");
     setPosTaxRate("15");
     setPosPaymentMethod("cash");
+    setPosPaymentStatus("unpaid");
     toast.success(`تم إنشاء ${invoice.invoiceNo} و ${order.orderNo}`);
   }
 
@@ -1163,7 +1176,7 @@ export function EnterpriseCustomersManager() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-2 rounded-lg border border-slate-200 bg-white p-3 md:grid-cols-3">
+            <div className="grid grid-cols-1 gap-2 rounded-lg border border-slate-200 bg-white p-3 md:grid-cols-4">
               <div>
                 <p className="mb-1 text-xs text-slate-600">الخصم (قيمة)</p>
                 <input
@@ -1196,6 +1209,19 @@ export function EnterpriseCustomersManager() {
                   <option value="cash">نقد</option>
                   <option value="card">شبكة</option>
                   <option value="transfer">تحويل</option>
+                </select>
+              </div>
+
+              <div>
+                <p className="mb-1 text-xs text-slate-600">حالة الدفع</p>
+                <select
+                  className="h-9 w-full rounded-lg border border-slate-200 px-2 text-sm"
+                  value={posPaymentStatus}
+                  onChange={(event) => setPosPaymentStatus(event.target.value as "unpaid" | "partial" | "paid")}
+                >
+                  <option value="unpaid">غير مدفوعة</option>
+                  <option value="partial">مدفوعة جزئياً</option>
+                  <option value="paid">مدفوعة</option>
                 </select>
               </div>
             </div>
@@ -1234,6 +1260,9 @@ export function EnterpriseCustomersManager() {
                     </div>
                     <p className="text-sm text-slate-700">عدد البنود: {invoice.items.length}</p>
                     <p className="text-xs text-slate-600">طريقة الدفع: {paymentMethodLabel[invoice.paymentMethod]}</p>
+                    <span className={`mt-1 inline-block rounded-full px-2 py-1 text-xs font-semibold ${paymentStatusLabel[invoice.paymentStatus].color}`}>
+                      {paymentStatusLabel[invoice.paymentStatus].label}
+                    </span>
                     <p className="text-xs text-slate-600">
                       {`الفرعي ${invoice.subtotal.toLocaleString()} - خصم ${invoice.discountAmount.toLocaleString()} + ضريبة ${invoice.taxAmount.toLocaleString()}`}
                     </p>
