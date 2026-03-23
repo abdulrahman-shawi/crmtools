@@ -571,6 +571,63 @@ export function EnterpriseExpensesManager() {
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                            <div className="space-y-3 rounded-lg border border-slate-200 p-3">
+                <p className="text-sm font-semibold text-slate-800">اختيار المنتجات المشتراة (POS)</p>
+                <div className="max-h-56 space-y-2 overflow-y-auto">
+                  {catalogProducts.map((product) => (
+                    <div key={product.id} className="flex items-center justify-between rounded-lg border border-slate-100 bg-slate-50 p-3">
+                      <div>
+                        <p className="text-sm font-semibold text-slate-900">{product.name}</p>
+                        <p className="text-xs text-slate-500">{product.sku}</p>
+                        <p className="text-xs text-emerald-700">{product.price.toLocaleString()}</p>
+                      </div>
+                      <Button size="sm" onClick={() => addPurchaseProduct(product)}>
+                        <ShoppingCart className="h-4 w-4" />
+                        إضافة
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+
+                {formState.items.length === 0 ? (
+                  <p className="text-sm text-slate-500">لم يتم اختيار منتجات بعد.</p>
+                ) : (
+                  <div className="max-h-64 space-y-2 overflow-y-auto">
+                    {formState.items.map((item) => (
+                      <div key={item.id} className="rounded-lg border border-slate-100 bg-slate-50 p-3">
+                        <div className="mb-2 flex items-center justify-between">
+                          <div>
+                            <p className="text-sm font-semibold text-slate-900">{item.name}</p>
+                            <p className="text-xs text-slate-500">{item.sku}</p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => removePurchaseItem(item.id)}
+                            className="rounded-md border border-red-200 px-2 py-1 text-xs text-red-700 hover:bg-red-50"
+                          >
+                            حذف
+                          </button>
+                        </div>
+
+                        <div className="grid grid-cols-3 items-center gap-2">
+                          <input
+                            type="number"
+                            min={1}
+                            className="h-9 rounded-lg border border-slate-200 px-2 text-sm"
+                            value={item.quantity}
+                            onChange={(event) => updatePurchaseItemQuantity(item.id, Number(event.target.value))}
+                          />
+                          <p className="text-sm text-slate-600">{item.price.toLocaleString()}</p>
+                          <p className="text-left text-sm font-semibold text-emerald-700">
+                            {(item.price * item.quantity).toLocaleString()}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              
               <div className="space-y-3 rounded-lg border border-slate-200 p-3">
                 <p className="text-sm font-semibold text-slate-800">بيانات شراء البضاعة</p>
                 <input
@@ -628,63 +685,6 @@ export function EnterpriseExpensesManager() {
                   value={formState.purchaseNotes}
                   onChange={(event) => setFormState((prev) => ({ ...prev, purchaseNotes: event.target.value }))}
                 />
-              </div>
-
-              <div className="space-y-3 rounded-lg border border-slate-200 p-3">
-                <p className="text-sm font-semibold text-slate-800">اختيار المنتجات المشتراة (POS)</p>
-                <div className="max-h-56 space-y-2 overflow-y-auto">
-                  {catalogProducts.map((product) => (
-                    <div key={product.id} className="flex items-center justify-between rounded-lg border border-slate-100 bg-slate-50 p-3">
-                      <div>
-                        <p className="text-sm font-semibold text-slate-900">{product.name}</p>
-                        <p className="text-xs text-slate-500">{product.sku}</p>
-                        <p className="text-xs text-emerald-700">{product.price.toLocaleString()}</p>
-                      </div>
-                      <Button size="sm" onClick={() => addPurchaseProduct(product)}>
-                        <ShoppingCart className="h-4 w-4" />
-                        إضافة
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-
-                {formState.items.length === 0 ? (
-                  <p className="text-sm text-slate-500">لم يتم اختيار منتجات بعد.</p>
-                ) : (
-                  <div className="max-h-64 space-y-2 overflow-y-auto">
-                    {formState.items.map((item) => (
-                      <div key={item.id} className="rounded-lg border border-slate-100 bg-slate-50 p-3">
-                        <div className="mb-2 flex items-center justify-between">
-                          <div>
-                            <p className="text-sm font-semibold text-slate-900">{item.name}</p>
-                            <p className="text-xs text-slate-500">{item.sku}</p>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => removePurchaseItem(item.id)}
-                            className="rounded-md border border-red-200 px-2 py-1 text-xs text-red-700 hover:bg-red-50"
-                          >
-                            حذف
-                          </button>
-                        </div>
-
-                        <div className="grid grid-cols-3 items-center gap-2">
-                          <input
-                            type="number"
-                            min={1}
-                            className="h-9 rounded-lg border border-slate-200 px-2 text-sm"
-                            value={item.quantity}
-                            onChange={(event) => updatePurchaseItemQuantity(item.id, Number(event.target.value))}
-                          />
-                          <p className="text-sm text-slate-600">{item.price.toLocaleString()}</p>
-                          <p className="text-left text-sm font-semibold text-emerald-700">
-                            {(item.price * item.quantity).toLocaleString()}
-                          </p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
               </div>
             </div>
           )}
