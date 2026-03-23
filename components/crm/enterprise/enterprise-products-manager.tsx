@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type ChangeEvent } from "react";
+import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 import { Pencil, Plus, Trash2, Upload } from "lucide-react";
 import toast from "react-hot-toast";
 import { DataTable, type Column } from "@/components/shared/DataTable";
@@ -12,6 +12,13 @@ import { SectionHeader } from "@/components/ui/section-header";
 type EntryType = "product" | "category";
 type DiscountType = "percentage" | "fixed";
 type CatalogFilter = "product" | "category";
+
+interface WarehouseOption {
+  id: string;
+  name: string;
+  country: string;
+  notes: string;
+}
 
 interface ProductImage {
   id: string;
@@ -26,9 +33,17 @@ interface VariantPrice {
   hex?: string;
 }
 
+interface WarehouseAllocation {
+  id: string;
+  warehouseId: string;
+  warehouseName: string;
+  quantity: number;
+}
+
 interface ProductEntry {
   id: string;
   type: "product";
+  createdAt: string;
   productName: string;
   categoryName: string;
   notes: string;
@@ -40,24 +55,29 @@ interface ProductEntry {
   discountValue: number;
   colors: VariantPrice[];
   sizes: VariantPrice[];
+  warehouseAllocations: WarehouseAllocation[];
   images: ProductImage[];
 }
 
 interface CategoryEntry {
   id: string;
   type: "category";
+  createdAt: string;
   categoryName: string;
   categoryColor: string;
   categoryNotes: string;
+  categoryWarehouseId: string;
 }
 
 type CatalogEntry = ProductEntry | CategoryEntry;
 
 interface ProductFormState {
   entryType: EntryType;
+  createdAt: string;
   categoryName: string;
   categoryColor: string;
   categoryNotes: string;
+  categoryWarehouseId: string;
   productName: string;
   productCategoryName: string;
   notes: string;
@@ -74,20 +94,34 @@ interface ProductFormState {
   sizeName: string;
   sizePrice: string;
   sizes: VariantPrice[];
+  allocationWarehouseId: string;
+  allocationQuantity: string;
+  warehouseAllocations: WarehouseAllocation[];
   images: ProductImage[];
 }
+
+const WAREHOUSES_STORAGE_KEY = "crm-enterprise-warehouses";
+
+const defaultWarehouses: WarehouseOption[] = [
+  { id: "wh_1", name: "مخزن الرياض الرئيسي", country: "SA", notes: "المخزن الرئيسي" },
+  { id: "wh_2", name: "مخزن جدة", country: "SA", notes: "المنطقة الغربية" },
+  { id: "wh_3", name: "مخزن دبي", country: "AE", notes: "فرع الإمارات" },
+];
 
 const initialEntries: CatalogEntry[] = [
   {
     id: "cat_1",
     type: "category",
+    createdAt: "2026-03-21",
     categoryName: "إلكترونيات",
     categoryColor: "#2563eb",
     categoryNotes: "تصنيف المنتجات الإلكترونية.",
+    categoryWarehouseId: "wh_1",
   },
   {
     id: "prd_1",
     type: "product",
+    createdAt: "2026-03-22",
     productName: "جهاز نقاط بيع",
     categoryName: "إلكترونيات",
     notes: "مناسب للمحلات ونقاط البيع الصغيرة والمتوسطة.",
@@ -105,15 +139,23 @@ const initialEntries: CatalogEntry[] = [
       { id: "prd_1_size_1", name: "صغير", price: 1450 },
       { id: "prd_1_size_2", name: "كبير", price: 1600 },
     ],
+    warehouseAllocations: [
+      { id: "alloc_1", warehouseId: "wh_1", warehouseName: "مخزن الرياض الرئيسي", quantity: 12 },
+      { id: "alloc_2", warehouseId: "wh_2", warehouseName: "مخزن جدة", quantity: 8 },
+    ],
     images: [],
   },
 ];
 
+const today = new Date().toISOString().slice(0, 10);
+
 const initialFormState: ProductFormState = {
   entryType: "product",
+  createdAt: today,
   categoryName: "",
   categoryColor: "#2563eb",
   categoryNotes: "",
+  categoryWarehouseId: "",
   productName: "",
   productCategoryName: "",
   notes: "",
@@ -130,24 +172,27 @@ const initialFormState: ProductFormState = {
   sizeName: "",
   sizePrice: "",
   sizes: [],
+  allocationWarehouseId: "",
+  allocationQuantity: "",
+  warehouseAllocations: [],
   images: [],
 };
 
 /**
- * Converts catalog row to searchable text.
+ * Converts row data into searchable text for table search.
  */
 function toSearchText(row: CatalogEntry): string {
   if (row.type === "category") {
-    return `${row.categoryName} ${row.categoryColor} ${row.categoryNotes} تصنيف`;
+    return `${row.categoryName} ${row.categoryColor} ${row.categoryNotes} ${row.createdAt}`;
   }
 
-  return `${row.productName} ${row.categoryName} ${row.notes} ${row.price} ${row.quantity} ${row.wholesalePrice} ${row.discountType ?? ""} ${row.discountValue} ${row.colors
-    .map((color) => `${color.name} ${color.hex ?? ""} ${color.price}`)
-    .join(" ")} ${row.sizes.map((size) => `${size.name} ${size.price}`).join(" ")} منتج`;
+  return `${row.productName} ${row.categoryName} ${row.notes} ${row.price} ${row.quantity} ${row.createdAt} ${row.warehouseAllocations
+    .map((allocation) => `${allocation.warehouseName} ${allocation.quantity}`)
+    .join(" ")}`;
 }
 
 /**
- * Creates image preview objects from selected files.
+ * Creates image preview objects for uploaded product images.
  */
 function mapFilesToImages(files: File[]): ProductImage[] {
   return files.map((file) => ({
@@ -158,7 +203,7 @@ function mapFilesToImages(files: File[]): ProductImage[] {
 }
 
 /**
- * Builds a color or size variant row with price.
+ * Builds a color or size variant with price.
  */
 function buildVariant(name: string, price: number, prefix: string, hex?: string): VariantPrice {
   return {
@@ -170,21 +215,55 @@ function buildVariant(name: string, price: number, prefix: string, hex?: string)
 }
 
 /**
- * Manages CRM enterprise products and categories in one page.
+ * Checks if date is between optional from/to boundaries.
+ */
+function isDateInRange(targetDate: string, fromDate: string, toDate: string): boolean {
+  if (fromDate && targetDate < fromDate) {
+    return false;
+  }
+
+  if (toDate && targetDate > toDate) {
+    return false;
+  }
+
+  return true;
+}
+
+/**
+ * Manages CRM enterprise products and categories with warehouse distribution.
  */
 export function EnterpriseProductsManager() {
   const [rows, setRows] = useState<CatalogEntry[]>(initialEntries);
+  const [warehouses, setWarehouses] = useState<WarehouseOption[]>(defaultWarehouses);
   const [page, setPage] = useState(1);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [catalogFilter, setCatalogFilter] = useState<CatalogFilter>("product");
-  const [formState, setFormState] = useState<ProductFormState>(initialFormState);
+  const [warehouseFilter, setWarehouseFilter] = useState<string>("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
+  const [formState, setFormState] = useState<ProductFormState>(initialFormState);
 
-  const filteredRows = useMemo(
-    () => rows.filter((row) => row.type === catalogFilter),
-    [rows, catalogFilter]
-  );
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    try {
+      const raw = window.localStorage.getItem(WAREHOUSES_STORAGE_KEY);
+      if (!raw) {
+        return;
+      }
+
+      const parsed = JSON.parse(raw) as WarehouseOption[];
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        setWarehouses(parsed);
+      }
+    } catch {
+      // Keep default warehouses when storage is invalid.
+    }
+  }, []);
 
   const selectedProduct = useMemo(
     () => rows.find((row): row is ProductEntry => row.type === "product" && row.id === selectedProductId) ?? null,
@@ -195,6 +274,26 @@ export function EnterpriseProductsManager() {
     () => rows.filter((row): row is CategoryEntry => row.type === "category"),
     [rows]
   );
+
+  const filteredRows = useMemo(() => {
+    const typeFiltered = rows.filter((row) => row.type === catalogFilter);
+
+    return typeFiltered.filter((row) => {
+      if (!isDateInRange(row.createdAt, dateFrom, dateTo)) {
+        return false;
+      }
+
+      if (warehouseFilter === "all") {
+        return true;
+      }
+
+      if (row.type === "category") {
+        return row.categoryWarehouseId === warehouseFilter;
+      }
+
+      return row.warehouseAllocations.some((allocation) => allocation.warehouseId === warehouseFilter);
+    });
+  }, [rows, catalogFilter, dateFrom, dateTo, warehouseFilter]);
 
   const totals = useMemo(() => {
     const productsCount = rows.filter((row) => row.type === "product").length;
@@ -235,39 +334,33 @@ export function EnterpriseProductsManager() {
         header: "التفاصيل",
         accessor: (row) =>
           row.type === "product"
-            ? `ألوان: ${row.colors.length} | قياسات: ${row.sizes.length} | صور: ${row.images.length}`
-            : `اللون: ${row.categoryColor}`,
+            ? `ألوان: ${row.colors.length} | قياسات: ${row.sizes.length} | مخازن: ${row.warehouseAllocations.length}`
+            : `لون: ${row.categoryColor}`,
+      },
+      {
+        header: "التاريخ",
+        accessor: (row) => row.createdAt,
       },
       {
         header: "السعر",
         accessor: (row) => (row.type === "product" ? row.price.toLocaleString() : "-"),
       },
       {
-        header: "التصنيف",
-        accessor: (row) => (row.type === "product" ? row.categoryName || "-" : "-"),
-      },
-      {
         header: "الكمية",
         accessor: (row) => (row.type === "product" ? row.quantity : "-"),
       },
       {
-        header: "سعر الجملة",
-        accessor: (row) => (row.type === "product" ? row.wholesalePrice.toLocaleString() : "-"),
+        header: "التصنيف",
+        accessor: (row) => (row.type === "product" ? row.categoryName || "-" : "-"),
       },
       {
-        header: "الخصم",
+        header: "المستودع",
         accessor: (row) => {
           if (row.type === "category") {
-            return "-";
+            return warehouses.find((warehouse) => warehouse.id === row.categoryWarehouseId)?.name ?? "-";
           }
 
-          if (!row.hasDiscount) {
-            return "لا يوجد";
-          }
-
-          return row.discountType === "percentage"
-            ? `${row.discountValue}%`
-            : `${row.discountValue.toLocaleString()} ثابت`;
+          return row.warehouseAllocations.map((allocation) => allocation.warehouseName).join("، ");
         },
       },
       {
@@ -292,11 +385,11 @@ export function EnterpriseProductsManager() {
         ),
       },
     ],
-    []
+    [warehouses]
   );
 
   /**
-   * Opens creation modal with clean state.
+   * Opens create modal with fresh state.
    */
   function openCreateModal() {
     setEditingId(null);
@@ -305,15 +398,17 @@ export function EnterpriseProductsManager() {
   }
 
   /**
-   * Opens edit modal and maps selected row to form state.
+   * Opens edit modal and maps existing row values to form state.
    */
   function openEditModal(row: CatalogEntry) {
     if (row.type === "category") {
       setFormState({
         entryType: "category",
+        createdAt: row.createdAt,
         categoryName: row.categoryName,
         categoryColor: row.categoryColor,
         categoryNotes: row.categoryNotes,
+        categoryWarehouseId: row.categoryWarehouseId,
         productName: "",
         productCategoryName: "",
         notes: "",
@@ -330,14 +425,19 @@ export function EnterpriseProductsManager() {
         sizeName: "",
         sizePrice: "",
         sizes: [],
+        allocationWarehouseId: "",
+        allocationQuantity: "",
+        warehouseAllocations: [],
         images: [],
       });
     } else {
       setFormState({
         entryType: "product",
+        createdAt: row.createdAt,
         categoryName: "",
         categoryColor: "#2563eb",
         categoryNotes: "",
+        categoryWarehouseId: "",
         productName: row.productName,
         productCategoryName: row.categoryName,
         notes: row.notes,
@@ -354,6 +454,9 @@ export function EnterpriseProductsManager() {
         sizeName: "",
         sizePrice: "",
         sizes: row.sizes,
+        allocationWarehouseId: "",
+        allocationQuantity: "",
+        warehouseAllocations: row.warehouseAllocations,
         images: row.images,
       });
     }
@@ -363,7 +466,7 @@ export function EnterpriseProductsManager() {
   }
 
   /**
-   * Handles multiple product image selection and preview generation.
+   * Handles multiple image selection with preview generation.
    */
   function handleImagesChange(event: ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.target.files ?? []);
@@ -381,7 +484,7 @@ export function EnterpriseProductsManager() {
   }
 
   /**
-   * Removes selected image from current form state.
+   * Removes one image from form state.
    */
   function removeImage(imageId: string) {
     setFormState((prev) => ({
@@ -391,12 +494,11 @@ export function EnterpriseProductsManager() {
   }
 
   /**
-   * Adds a priced color option to the current product.
+   * Adds one color option with dedicated price.
    */
   function addColorOption() {
     const name = formState.colorName.trim();
     const price = Number(formState.colorPrice || 0);
-    const hex = formState.colorHex;
 
     if (!name) {
       toast.error("اسم اللون مطلوب");
@@ -413,12 +515,12 @@ export function EnterpriseProductsManager() {
       colorHex: "#2563eb",
       colorName: "",
       colorPrice: "",
-      colors: [...prev.colors, buildVariant(name, price, "color", hex)],
+      colors: [...prev.colors, buildVariant(name, price, "color", formState.colorHex)],
     }));
   }
 
   /**
-   * Adds a priced size option to the current product.
+   * Adds one size option with dedicated price.
    */
   function addSizeOption() {
     const name = formState.sizeName.trim();
@@ -443,7 +545,63 @@ export function EnterpriseProductsManager() {
   }
 
   /**
-   * Removes one priced color option.
+   * Adds allocation entry to distribute same product across warehouses.
+   */
+  function addWarehouseAllocation() {
+    if (!formState.allocationWarehouseId) {
+      toast.error("اختر مستودعًا أولاً");
+      return;
+    }
+
+    const quantity = Number(formState.allocationQuantity || 0);
+    if (Number.isNaN(quantity) || quantity <= 0) {
+      toast.error("كمية المستودع غير صحيحة");
+      return;
+    }
+
+    const warehouse = warehouses.find((item) => item.id === formState.allocationWarehouseId);
+    if (!warehouse) {
+      toast.error("المستودع المحدد غير موجود");
+      return;
+    }
+
+    const alreadyExists = formState.warehouseAllocations.some(
+      (allocation) => allocation.warehouseId === warehouse.id
+    );
+
+    if (alreadyExists) {
+      toast.error("تمت إضافة هذا المستودع مسبقًا");
+      return;
+    }
+
+    setFormState((prev) => ({
+      ...prev,
+      allocationWarehouseId: "",
+      allocationQuantity: "",
+      warehouseAllocations: [
+        ...prev.warehouseAllocations,
+        {
+          id: `alloc_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+          warehouseId: warehouse.id,
+          warehouseName: warehouse.name,
+          quantity,
+        },
+      ],
+    }));
+  }
+
+  /**
+   * Removes one warehouse allocation from current product.
+   */
+  function removeWarehouseAllocation(allocationId: string) {
+    setFormState((prev) => ({
+      ...prev,
+      warehouseAllocations: prev.warehouseAllocations.filter((allocation) => allocation.id !== allocationId),
+    }));
+  }
+
+  /**
+   * Removes one color option.
    */
   function removeColorOption(variantId: string) {
     setFormState((prev) => ({
@@ -453,7 +611,7 @@ export function EnterpriseProductsManager() {
   }
 
   /**
-   * Removes one priced size option.
+   * Removes one size option.
    */
   function removeSizeOption(variantId: string) {
     setFormState((prev) => ({
@@ -463,7 +621,7 @@ export function EnterpriseProductsManager() {
   }
 
   /**
-   * Validates and saves category or product entry.
+   * Saves category or product after validating entered fields.
    */
   function handleSave() {
     if (formState.entryType === "category") {
@@ -472,12 +630,19 @@ export function EnterpriseProductsManager() {
         return;
       }
 
+      if (!formState.categoryWarehouseId) {
+        toast.error("اختر مستودع التصنيف");
+        return;
+      }
+
       const categoryPayload: CategoryEntry = {
         id: editingId ?? `cat_${Date.now()}`,
         type: "category",
+        createdAt: formState.createdAt || today,
         categoryName: formState.categoryName.trim(),
         categoryColor: formState.categoryColor,
         categoryNotes: formState.categoryNotes.trim(),
+        categoryWarehouseId: formState.categoryWarehouseId,
       };
 
       if (editingId) {
@@ -513,16 +678,21 @@ export function EnterpriseProductsManager() {
         return;
       }
 
-      if (formState.hasDiscount) {
-        if (Number.isNaN(discountValue) || discountValue <= 0) {
-          toast.error("قيمة الخصم غير صحيحة");
-          return;
-        }
+      if (formState.hasDiscount && (Number.isNaN(discountValue) || discountValue <= 0)) {
+        toast.error("قيمة الخصم غير صحيحة");
+        return;
+      }
+
+      const allocatedTotal = formState.warehouseAllocations.reduce((sum, allocation) => sum + allocation.quantity, 0);
+      if (allocatedTotal !== quantity) {
+        toast.error("يجب أن يساوي مجموع كميات المستودعات كمية المنتج");
+        return;
       }
 
       const productPayload: ProductEntry = {
         id: editingId ?? `prd_${Date.now()}`,
         type: "product",
+        createdAt: formState.createdAt || today,
         productName: formState.productName.trim(),
         categoryName: formState.productCategoryName.trim(),
         notes: formState.notes.trim(),
@@ -534,6 +704,7 @@ export function EnterpriseProductsManager() {
         discountValue: formState.hasDiscount ? discountValue : 0,
         colors: formState.colors,
         sizes: formState.sizes,
+        warehouseAllocations: formState.warehouseAllocations,
         images: formState.images,
       };
 
@@ -552,7 +723,7 @@ export function EnterpriseProductsManager() {
   }
 
   /**
-   * Deletes selected row after confirmation.
+   * Deletes a row after user confirmation.
    */
   function handleDelete(row: CatalogEntry) {
     const confirmed = window.confirm("هل تريد حذف هذا السجل؟");
@@ -569,12 +740,15 @@ export function EnterpriseProductsManager() {
       <SectionHeader
         align="right"
         title="إدارة المنتجات والتصنيفات"
-        description="يمكنك إضافة منتج أو تصنيف من نفس الشاشة بنموذج ذكي حسب نوع الإدخال."
+        description="يمكنك توزيع نفس المنتج على أكثر من مستودع مع فلاتر بحسب التاريخ والمستودع."
       >
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
-            onClick={() => setCatalogFilter("product")}
+            onClick={() => {
+              setCatalogFilter("product");
+              setPage(1);
+            }}
             className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${
               catalogFilter === "product" ? "bg-blue-600 text-white" : "border border-slate-200 text-slate-700"
             }`}
@@ -583,7 +757,10 @@ export function EnterpriseProductsManager() {
           </button>
           <button
             type="button"
-            onClick={() => setCatalogFilter("category")}
+            onClick={() => {
+              setCatalogFilter("category");
+              setPage(1);
+            }}
             className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${
               catalogFilter === "category" ? "bg-emerald-600 text-white" : "border border-slate-200 text-slate-700"
             }`}
@@ -620,9 +797,45 @@ export function EnterpriseProductsManager() {
       <DynamicCard>
         <DynamicCard.Header
           title={catalogFilter === "product" ? "قائمة المنتجات" : "قائمة التصنيفات"}
-          description="بحث وتعديل وحذف من جدول موحد."
+          description="فلترة حسب التاريخ والمستودع مع بحث وتعديل وحذف."
         />
-        <DynamicCard.Content className="pt-4">
+        <DynamicCard.Content className="space-y-3 pt-4">
+          <div className="grid grid-cols-1 gap-3 rounded-lg border border-slate-200 p-3 md:grid-cols-3">
+            <input
+              type="date"
+              className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
+              value={dateFrom}
+              onChange={(event) => {
+                setDateFrom(event.target.value);
+                setPage(1);
+              }}
+            />
+            <input
+              type="date"
+              className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
+              value={dateTo}
+              onChange={(event) => {
+                setDateTo(event.target.value);
+                setPage(1);
+              }}
+            />
+            <select
+              className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
+              value={warehouseFilter}
+              onChange={(event) => {
+                setWarehouseFilter(event.target.value);
+                setPage(1);
+              }}
+            >
+              <option value="all">كل المستودعات</option>
+              {warehouses.map((warehouse) => (
+                <option key={warehouse.id} value={warehouse.id}>
+                  {warehouse.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
           <DataTable
             columns={columns}
             data={filteredRows}
@@ -641,7 +854,7 @@ export function EnterpriseProductsManager() {
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         title={editingId ? "تعديل سجل" : "إضافة منتج أو تصنيف"}
-        size="lg"
+        size="xl"
         footer={
           <>
             <Button onClick={handleSave}>{editingId ? "حفظ التعديل" : "إضافة"}</Button>
@@ -652,10 +865,9 @@ export function EnterpriseProductsManager() {
         }
       >
         <div className="space-y-4">
-          <div>
-            <p className="mb-1 text-xs text-slate-600">نوع الإضافة</p>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             <select
-              className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm"
+              className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
               value={formState.entryType}
               onChange={(event) =>
                 setFormState((prev) => ({
@@ -667,6 +879,12 @@ export function EnterpriseProductsManager() {
               <option value="product">منتج</option>
               <option value="category">تصنيف</option>
             </select>
+            <input
+              type="date"
+              className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
+              value={formState.createdAt}
+              onChange={(event) => setFormState((prev) => ({ ...prev, createdAt: event.target.value }))}
+            />
           </div>
 
           {formState.entryType === "category" ? (
@@ -677,6 +895,18 @@ export function EnterpriseProductsManager() {
                 value={formState.categoryName}
                 onChange={(event) => setFormState((prev) => ({ ...prev, categoryName: event.target.value }))}
               />
+              <select
+                className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
+                value={formState.categoryWarehouseId}
+                onChange={(event) => setFormState((prev) => ({ ...prev, categoryWarehouseId: event.target.value }))}
+              >
+                <option value="">اختر المستودع</option>
+                {warehouses.map((warehouse) => (
+                  <option key={warehouse.id} value={warehouse.id}>
+                    {warehouse.name}
+                  </option>
+                ))}
+              </select>
               <div>
                 <p className="mb-1 text-xs text-slate-600">لون التصنيف</p>
                 <input
@@ -826,6 +1056,54 @@ export function EnterpriseProductsManager() {
                 )}
               </div>
 
+              <div className="space-y-3 rounded-lg border border-slate-200 p-3 md:col-span-2">
+                <p className="text-sm font-semibold text-slate-700">توزيع المنتج على المستودعات</p>
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_180px_auto]">
+                  <select
+                    className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
+                    value={formState.allocationWarehouseId}
+                    onChange={(event) => setFormState((prev) => ({ ...prev, allocationWarehouseId: event.target.value }))}
+                  >
+                    <option value="">اختر المستودع</option>
+                    {warehouses.map((warehouse) => (
+                      <option key={warehouse.id} value={warehouse.id}>
+                        {warehouse.name}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    type="number"
+                    className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
+                    placeholder="الكمية"
+                    value={formState.allocationQuantity}
+                    onChange={(event) => setFormState((prev) => ({ ...prev, allocationQuantity: event.target.value }))}
+                  />
+                  <Button type="button" onClick={addWarehouseAllocation}>إضافة مستودع</Button>
+                </div>
+
+                {formState.warehouseAllocations.length > 0 ? (
+                  <div className="space-y-2">
+                    {formState.warehouseAllocations.map((allocation) => (
+                      <div key={allocation.id} className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-sm">
+                        <span>{allocation.warehouseName}</span>
+                        <div className="flex items-center gap-3">
+                          <span>الكمية: {allocation.quantity}</span>
+                          <button
+                            type="button"
+                            className="text-red-600 hover:underline"
+                            onClick={() => removeWarehouseAllocation(allocation.id)}
+                          >
+                            حذف
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate-500">لم يتم توزيع المنتج على مستودعات بعد.</p>
+                )}
+              </div>
+
               <div className="md:col-span-2 rounded-lg border border-slate-200 p-3">
                 <label className="flex items-center gap-2 text-sm text-slate-700">
                   <input
@@ -918,6 +1196,7 @@ export function EnterpriseProductsManager() {
             <div className="grid gap-3 rounded-lg border border-slate-200 p-4 md:grid-cols-2">
               <p>اسم المنتج: <span className="font-semibold">{selectedProduct.productName}</span></p>
               <p>التصنيف: <span className="font-semibold">{selectedProduct.categoryName || "غير محدد"}</span></p>
+              <p>التاريخ: <span className="font-semibold">{selectedProduct.createdAt}</span></p>
               <p>السعر: <span className="font-semibold">{selectedProduct.price.toLocaleString()}</span></p>
               <p>سعر الجملة: <span className="font-semibold">{selectedProduct.wholesalePrice.toLocaleString()}</span></p>
               <p>الكمية: <span className="font-semibold">{selectedProduct.quantity}</span></p>
@@ -966,6 +1245,22 @@ export function EnterpriseProductsManager() {
                   <p className="text-sm text-slate-500">لا توجد قياسات.</p>
                 )}
               </div>
+            </div>
+
+            <div className="rounded-lg border border-slate-200 p-4">
+              <p className="mb-2 text-sm font-semibold text-slate-800">توزيع المستودعات</p>
+              {selectedProduct.warehouseAllocations.length > 0 ? (
+                <div className="space-y-2">
+                  {selectedProduct.warehouseAllocations.map((allocation) => (
+                    <div key={allocation.id} className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-sm">
+                      <span>{allocation.warehouseName}</span>
+                      <span>الكمية: {allocation.quantity}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-slate-500">لا يوجد توزيع مستودعات لهذا المنتج.</p>
+              )}
             </div>
 
             <div className="rounded-lg border border-slate-200 p-4">
