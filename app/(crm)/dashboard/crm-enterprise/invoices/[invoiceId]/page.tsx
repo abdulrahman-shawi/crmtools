@@ -30,8 +30,14 @@ interface SalesInvoice {
   customerId: string;
   customerName: string;
   date: string;
-  paymentMethod: "cash" | "card" | "transfer";
+  paymentMethod: "bank_transfer" | "cod" | "other";
   paymentStatus: "unpaid" | "partial" | "paid";
+  receiverName: string;
+  receiverPhone: string;
+  receiverCity: string;
+  receivedAmount: number;
+  remainingAmount: number;
+  deliveryNotes: string;
   subtotal: number;
   discountAmount: number;
   taxRate: number;
@@ -44,9 +50,9 @@ interface SalesInvoice {
 const SALES_INVOICES_STORAGE_KEY = "crm-enterprise-sales-invoices";
 
 const paymentMethodLabel: Record<SalesInvoice["paymentMethod"], string> = {
-  cash: "نقد",
-  card: "شبكة",
-  transfer: "تحويل",
+  bank_transfer: "دفع بنكي",
+  cod: "عند الاستلام",
+  other: "طرق أخرى",
 };
 
 const paymentStatusLabel: Record<SalesInvoice["paymentStatus"], { label: string; color: string }> = {
@@ -121,9 +127,13 @@ function normalizeSalesInvoice(raw: unknown): SalesInvoice | null {
   const total = Math.max(0, toSafeNumber(invoice.total, taxableAmount + taxAmount));
 
   const paymentMethod: SalesInvoice["paymentMethod"] =
-    invoice.paymentMethod === "cash" || invoice.paymentMethod === "card" || invoice.paymentMethod === "transfer"
+    invoice.paymentMethod === "bank_transfer" || invoice.paymentMethod === "cod" || invoice.paymentMethod === "other"
       ? invoice.paymentMethod
-      : "cash";
+      : invoice.paymentMethod === "transfer"
+        ? "bank_transfer"
+        : invoice.paymentMethod === "cash"
+          ? "cod"
+          : "other";
 
   const paymentStatus: SalesInvoice["paymentStatus"] =
     invoice.paymentStatus === "unpaid" || invoice.paymentStatus === "partial" || invoice.paymentStatus === "paid"
@@ -140,6 +150,12 @@ function normalizeSalesInvoice(raw: unknown): SalesInvoice | null {
     date: typeof invoice.date === "string" ? invoice.date : new Date().toISOString().slice(0, 10),
     paymentMethod,
     paymentStatus,
+    receiverName: typeof invoice.receiverName === "string" ? invoice.receiverName : "",
+    receiverPhone: typeof invoice.receiverPhone === "string" ? invoice.receiverPhone : "",
+    receiverCity: typeof invoice.receiverCity === "string" ? invoice.receiverCity : "",
+    receivedAmount: Math.max(0, toSafeNumber(invoice.receivedAmount, 0)),
+    remainingAmount: Math.max(0, toSafeNumber(invoice.remainingAmount, total)),
+    deliveryNotes: typeof invoice.deliveryNotes === "string" ? invoice.deliveryNotes : "",
     subtotal,
     discountAmount,
     taxRate,
@@ -424,9 +440,9 @@ export default function InvoiceDetailsPage({ params }: InvoiceDetailsPageProps) 
                 value={currentInvoice.paymentMethod}
                 onChange={(event) => updateDraftField("paymentMethod", event.target.value as SalesInvoice["paymentMethod"])}
               >
-                <option value="cash">نقد</option>
-                <option value="card">شبكة</option>
-                <option value="transfer">تحويل</option>
+                <option value="bank_transfer">دفع بنكي</option>
+                <option value="cod">عند الاستلام</option>
+                <option value="other">طرق أخرى</option>
               </select>
             ) : (
               <p className="text-xl font-bold text-indigo-700">{paymentMethodLabel[currentInvoice.paymentMethod]}</p>

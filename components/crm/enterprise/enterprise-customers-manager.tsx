@@ -87,8 +87,14 @@ interface SalesInvoice {
   customerId: string;
   customerName: string;
   date: string;
-  paymentMethod: "cash" | "card" | "transfer";
+  paymentMethod: "bank_transfer" | "cod" | "other";
   paymentStatus: "unpaid" | "partial" | "paid";
+  receiverName: string;
+  receiverPhone: string;
+  receiverCity: string;
+  receivedAmount: number;
+  remainingAmount: number;
+  deliveryNotes: string;
   subtotal: number;
   discountAmount: number;
   taxRate: number;
@@ -101,15 +107,28 @@ interface SalesInvoice {
 interface SalesOrder {
   id: string;
   orderNo: string;
+  invoiceId: string;
+  invoiceNo: string;
   customerId: string;
   customerName: string;
   date: string;
+  receiverName: string;
+  receiverPhone: string;
+  receiverCity: string;
+  paymentMethod: SalesInvoice["paymentMethod"];
+  receivedAmount: number;
+  remainingAmount: number;
+  deliveryNotes: string;
+  shippingCompanyId: string | null;
+  shippingCompanyName: string;
+  shippingCost: number;
   total: number;
   itemCount: number;
   status: "new" | "processing" | "completed";
 }
 
 const SALES_INVOICES_STORAGE_KEY = "crm-enterprise-sales-invoices";
+const SALES_ORDERS_STORAGE_KEY = "crm-enterprise-sales-orders";
 
 const sizeLabel: Record<EnterpriseCustomer["companySize"], string> = {
   medium: "متوسطة",
@@ -135,10 +154,10 @@ const channelLabel: Record<CustomerCommunication["channel"], string> = {
   whatsapp: "واتساب",
 };
 
-const paymentMethodLabel: Record<"cash" | "card" | "transfer", string> = {
-  cash: "نقد",
-  card: "شبكة",
-  transfer: "تحويل",
+const paymentMethodLabel: Record<SalesInvoice["paymentMethod"], string> = {
+  bank_transfer: "دفع بنكي",
+  cod: "عند الاستلام",
+  other: "طرق أخرى",
 };
 
 const paymentStatusLabel: Record<"unpaid" | "partial" | "paid", { label: string; color: string }> = {
@@ -249,9 +268,13 @@ function normalizeSalesInvoice(raw: unknown): SalesInvoice | null {
   const total = Math.max(0, toSafeNumber(invoice.total, taxableAmount + taxAmount));
 
   const paymentMethod: SalesInvoice["paymentMethod"] =
-    invoice.paymentMethod === "cash" || invoice.paymentMethod === "card" || invoice.paymentMethod === "transfer"
+    invoice.paymentMethod === "bank_transfer" || invoice.paymentMethod === "cod" || invoice.paymentMethod === "other"
       ? invoice.paymentMethod
-      : "cash";
+      : invoice.paymentMethod === "transfer"
+        ? "bank_transfer"
+        : invoice.paymentMethod === "cash"
+          ? "cod"
+          : "other";
 
   const paymentStatus: SalesInvoice["paymentStatus"] =
     invoice.paymentStatus === "unpaid" || invoice.paymentStatus === "partial" || invoice.paymentStatus === "paid"
@@ -268,6 +291,12 @@ function normalizeSalesInvoice(raw: unknown): SalesInvoice | null {
     date: typeof invoice.date === "string" ? invoice.date : new Date().toISOString().slice(0, 10),
     paymentMethod,
     paymentStatus,
+    receiverName: typeof invoice.receiverName === "string" ? invoice.receiverName : "",
+    receiverPhone: typeof invoice.receiverPhone === "string" ? invoice.receiverPhone : "",
+    receiverCity: typeof invoice.receiverCity === "string" ? invoice.receiverCity : "",
+    receivedAmount: Math.max(0, toSafeNumber(invoice.receivedAmount, 0)),
+    remainingAmount: Math.max(0, toSafeNumber(invoice.remainingAmount, total)),
+    deliveryNotes: typeof invoice.deliveryNotes === "string" ? invoice.deliveryNotes : "",
     subtotal,
     discountAmount,
     taxRate,
@@ -275,6 +304,53 @@ function normalizeSalesInvoice(raw: unknown): SalesInvoice | null {
     total,
     status,
     items,
+  };
+}
+
+/**
+ * Normalizes sales order payloads loaded from localStorage.
+ */
+function normalizeSalesOrder(raw: unknown): SalesOrder | null {
+  if (!raw || typeof raw !== "object") {
+    return null;
+  }
+
+  const order = raw as Partial<SalesOrder>;
+  if (typeof order.id !== "string" || typeof order.customerId !== "string") {
+    return null;
+  }
+
+  const paymentMethod: SalesOrder["paymentMethod"] =
+    order.paymentMethod === "bank_transfer" || order.paymentMethod === "cod" || order.paymentMethod === "other"
+      ? order.paymentMethod
+      : "other";
+
+  const status: SalesOrder["status"] =
+    order.status === "new" || order.status === "processing" || order.status === "completed"
+      ? order.status
+      : "new";
+
+  return {
+    id: order.id,
+    orderNo: typeof order.orderNo === "string" ? order.orderNo : `SO-${order.id.slice(-6)}`,
+    invoiceId: typeof order.invoiceId === "string" ? order.invoiceId : "",
+    invoiceNo: typeof order.invoiceNo === "string" ? order.invoiceNo : "",
+    customerId: order.customerId,
+    customerName: typeof order.customerName === "string" ? order.customerName : "عميل",
+    date: typeof order.date === "string" ? order.date : new Date().toISOString().slice(0, 10),
+    receiverName: typeof order.receiverName === "string" ? order.receiverName : "",
+    receiverPhone: typeof order.receiverPhone === "string" ? order.receiverPhone : "",
+    receiverCity: typeof order.receiverCity === "string" ? order.receiverCity : "",
+    paymentMethod,
+    receivedAmount: Math.max(0, toSafeNumber(order.receivedAmount, 0)),
+    remainingAmount: Math.max(0, toSafeNumber(order.remainingAmount, 0)),
+    deliveryNotes: typeof order.deliveryNotes === "string" ? order.deliveryNotes : "",
+    shippingCompanyId: typeof order.shippingCompanyId === "string" ? order.shippingCompanyId : null,
+    shippingCompanyName: typeof order.shippingCompanyName === "string" ? order.shippingCompanyName : "",
+    shippingCost: Math.max(0, toSafeNumber(order.shippingCost, 0)),
+    total: Math.max(0, toSafeNumber(order.total, 0)),
+    itemCount: Math.max(0, Math.trunc(toSafeNumber(order.itemCount, 0))),
+    status,
   };
 }
 
@@ -380,8 +456,14 @@ const initialSalesInvoices: SalesInvoice[] = [
     customerId: "ent_cus_1",
     customerName: "شركة النخبة للتقنية",
     date: "2026-03-12",
-    paymentMethod: "card",
+    paymentMethod: "bank_transfer",
     paymentStatus: "paid",
+    receiverName: "فهد المطيري",
+    receiverPhone: "0500000001",
+    receiverCity: "الرياض",
+    receivedAmount: 4798,
+    remainingAmount: 0,
+    deliveryNotes: "تسليم لمقر الشركة الرئيسي",
     subtotal: 4797,
     discountAmount: 0,
     taxRate: 0,
@@ -399,8 +481,14 @@ const initialSalesInvoices: SalesInvoice[] = [
     customerId: "ent_cus_2",
     customerName: "مؤسسة رواد الأعمال",
     date: "2026-03-15",
-    paymentMethod: "transfer",
+    paymentMethod: "other",
     paymentStatus: "partial",
+    receiverName: "ماجد سالم",
+    receiverPhone: "0500000002",
+    receiverCity: "جدة",
+    receivedAmount: 900,
+    remainingAmount: 950,
+    deliveryNotes: "تواصل قبل الوصول بساعة",
     subtotal: 1490,
     discountAmount: 50,
     taxRate: 24.16,
@@ -418,9 +506,21 @@ const initialSalesOrders: SalesOrder[] = [
   {
     id: "ord_1",
     orderNo: "SO-4101",
+    invoiceId: "inv_1",
+    invoiceNo: "INV-3001",
     customerId: "ent_cus_1",
     customerName: "شركة النخبة للتقنية",
     date: "2026-03-12",
+    receiverName: "فهد المطيري",
+    receiverPhone: "0500000001",
+    receiverCity: "الرياض",
+    paymentMethod: "bank_transfer",
+    receivedAmount: 4798,
+    remainingAmount: 0,
+    deliveryNotes: "تسليم لمقر الشركة الرئيسي",
+    shippingCompanyId: null,
+    shippingCompanyName: "",
+    shippingCost: 0,
     total: 4798,
     itemCount: 3,
     status: "processing",
@@ -428,9 +528,21 @@ const initialSalesOrders: SalesOrder[] = [
   {
     id: "ord_2",
     orderNo: "SO-4102",
+    invoiceId: "inv_2",
+    invoiceNo: "INV-3002",
     customerId: "ent_cus_2",
     customerName: "مؤسسة رواد الأعمال",
     date: "2026-03-15",
+    receiverName: "ماجد سالم",
+    receiverPhone: "0500000002",
+    receiverCity: "جدة",
+    paymentMethod: "other",
+    receivedAmount: 900,
+    remainingAmount: 950,
+    deliveryNotes: "تواصل قبل الوصول بساعة",
+    shippingCompanyId: null,
+    shippingCompanyName: "",
+    shippingCost: 0,
     total: 1850,
     itemCount: 3,
     status: "new",
@@ -458,8 +570,13 @@ export function EnterpriseCustomersManager() {
   const [posItems, setPosItems] = useState<PosLineItem[]>([]);
   const [posDiscountAmount, setPosDiscountAmount] = useState("0");
   const [posTaxRate, setPosTaxRate] = useState("15");
-  const [posPaymentMethod, setPosPaymentMethod] = useState<"cash" | "card" | "transfer">("cash");
+  const [posPaymentMethod, setPosPaymentMethod] = useState<SalesInvoice["paymentMethod"]>("bank_transfer");
   const [posPaymentStatus, setPosPaymentStatus] = useState<"unpaid" | "partial" | "paid">("unpaid");
+  const [posReceiverName, setPosReceiverName] = useState("");
+  const [posReceiverPhone, setPosReceiverPhone] = useState("");
+  const [posReceiverCity, setPosReceiverCity] = useState("");
+  const [posReceivedAmount, setPosReceivedAmount] = useState("");
+  const [posDeliveryNotes, setPosDeliveryNotes] = useState("");
   const [salesInvoices, setSalesInvoices] = useState<SalesInvoice[]>(initialSalesInvoices);
   const [salesOrders, setSalesOrders] = useState<SalesOrder[]>(initialSalesOrders);
   const [isCustomerHistoryModalOpen, setIsCustomerHistoryModalOpen] = useState(false);
@@ -498,6 +615,39 @@ export function EnterpriseCustomersManager() {
 
     window.localStorage.setItem(SALES_INVOICES_STORAGE_KEY, JSON.stringify(salesInvoices));
   }, [salesInvoices]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    try {
+      const raw = window.localStorage.getItem(SALES_ORDERS_STORAGE_KEY);
+      if (!raw) {
+        return;
+      }
+
+      const parsed = JSON.parse(raw) as unknown;
+      if (Array.isArray(parsed)) {
+        const normalized = parsed
+          .map((order) => normalizeSalesOrder(order))
+          .filter((order): order is SalesOrder => order !== null);
+        if (normalized.length > 0) {
+          setSalesOrders(normalized);
+        }
+      }
+    } catch {
+      // Fallback to in-memory defaults if storage is unavailable.
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    window.localStorage.setItem(SALES_ORDERS_STORAGE_KEY, JSON.stringify(salesOrders));
+  }, [salesOrders]);
 
   const activeCustomer = useMemo(
     () => customers.find((customer) => customer.id === activeCustomerId) ?? null,
@@ -556,6 +706,23 @@ export function EnterpriseCustomersManager() {
   }, [posTaxRate, posTaxableAmount]);
 
   const posGrandTotal = useMemo(() => posTaxableAmount + posTaxValue, [posTaxableAmount, posTaxValue]);
+
+  const posSafeReceivedAmount = useMemo(() => {
+    const value = Number(posReceivedAmount || 0);
+    if (Number.isNaN(value) || value < 0) {
+      return 0;
+    }
+
+    return value;
+  }, [posReceivedAmount]);
+
+  const posRemainingAmount = useMemo(() => {
+    if (posPaymentMethod !== "other") {
+      return 0;
+    }
+
+    return Math.max(0, posGrandTotal - posSafeReceivedAmount);
+  }, [posGrandTotal, posPaymentMethod, posSafeReceivedAmount]);
 
   const customerHistoryInvoices = useMemo(
     () => salesInvoices.filter((invoice) => invoice.customerId === historyCustomerId),
@@ -734,8 +901,13 @@ export function EnterpriseCustomersManager() {
     setPosItems([]);
     setPosDiscountAmount("0");
     setPosTaxRate("15");
-    setPosPaymentMethod("cash");
+    setPosPaymentMethod("bank_transfer");
     setPosPaymentStatus("unpaid");
+    setPosReceiverName(customer.companyName);
+    setPosReceiverPhone(customer.phone);
+    setPosReceiverCity(customer.city);
+    setPosReceivedAmount("");
+    setPosDeliveryNotes("");
     setIsPosModalOpen(true);
   }
 
@@ -848,12 +1020,31 @@ export function EnterpriseCustomersManager() {
       return;
     }
 
+    if (!posReceiverName.trim() || !posReceiverPhone.trim() || !posReceiverCity.trim()) {
+      toast.error("يرجى تعبئة اسم المستلم ورقمه ومدينة الاستلام");
+      return;
+    }
+
+    if (posPaymentMethod === "other" && posSafeReceivedAmount <= 0) {
+      toast.error("يرجى إدخال المبلغ المستلم عند اختيار طرق أخرى");
+      return;
+    }
+
     const now = new Date();
     const today = now.toISOString().slice(0, 10);
     const invoiceNo = `INV-${now.getTime().toString().slice(-6)}`;
     const orderNo = `SO-${now.getTime().toString().slice(-6)}`;
     const total = posGrandTotal;
     const taxRate = Number(posTaxRate || 0);
+
+    const computedPaymentStatus: SalesInvoice["paymentStatus"] =
+      posPaymentMethod === "cod"
+        ? "unpaid"
+        : posPaymentMethod === "bank_transfer"
+          ? "paid"
+          : posRemainingAmount > 0
+            ? "partial"
+            : "paid";
 
     const invoice: SalesInvoice = {
       id: `invoice_${now.getTime()}`,
@@ -862,7 +1053,13 @@ export function EnterpriseCustomersManager() {
       customerName: posCustomer.companyName,
       date: today,
       paymentMethod: posPaymentMethod,
-      paymentStatus: posPaymentStatus,
+      paymentStatus: computedPaymentStatus,
+      receiverName: posReceiverName.trim(),
+      receiverPhone: posReceiverPhone.trim(),
+      receiverCity: posReceiverCity.trim(),
+      receivedAmount: posPaymentMethod === "other" ? posSafeReceivedAmount : total,
+      remainingAmount: posPaymentMethod === "other" ? posRemainingAmount : posPaymentMethod === "cod" ? total : 0,
+      deliveryNotes: posDeliveryNotes.trim(),
       subtotal: posSubtotal,
       discountAmount: posDiscount,
       taxRate: Number.isNaN(taxRate) ? 0 : taxRate,
@@ -875,9 +1072,21 @@ export function EnterpriseCustomersManager() {
     const order: SalesOrder = {
       id: `order_${now.getTime()}`,
       orderNo,
+      invoiceId: invoice.id,
+      invoiceNo,
       customerId: posCustomer.id,
       customerName: posCustomer.companyName,
       date: today,
+      receiverName: posReceiverName.trim(),
+      receiverPhone: posReceiverPhone.trim(),
+      receiverCity: posReceiverCity.trim(),
+      paymentMethod: posPaymentMethod,
+      receivedAmount: invoice.receivedAmount,
+      remainingAmount: invoice.remainingAmount,
+      deliveryNotes: posDeliveryNotes.trim(),
+      shippingCompanyId: null,
+      shippingCompanyName: "",
+      shippingCost: 0,
       total,
       itemCount: posItems.reduce((sum, item) => sum + item.quantity, 0),
       status: "new",
@@ -902,8 +1111,13 @@ export function EnterpriseCustomersManager() {
     setProductSearch("");
     setPosDiscountAmount("0");
     setPosTaxRate("15");
-    setPosPaymentMethod("cash");
+    setPosPaymentMethod("bank_transfer");
     setPosPaymentStatus("unpaid");
+    setPosReceiverName("");
+    setPosReceiverPhone("");
+    setPosReceiverCity("");
+    setPosReceivedAmount("");
+    setPosDeliveryNotes("");
     toast.success(`تم إنشاء ${invoice.invoiceNo} و ${order.orderNo}`);
   }
 
@@ -1362,6 +1576,27 @@ export function EnterpriseCustomersManager() {
           </div>
 
           <div className="space-y-3 rounded-lg border border-slate-200 p-3">
+            <div className="grid grid-cols-1 gap-2 rounded-lg border border-slate-200 bg-white p-3 md:grid-cols-2">
+              <input
+                className="h-9 rounded-lg border border-slate-200 px-2 text-sm"
+                placeholder="اسم المستلم"
+                value={posReceiverName}
+                onChange={(event) => setPosReceiverName(event.target.value)}
+              />
+              <input
+                className="h-9 rounded-lg border border-slate-200 px-2 text-sm"
+                placeholder="رقم المستلم"
+                value={posReceiverPhone}
+                onChange={(event) => setPosReceiverPhone(event.target.value)}
+              />
+              <input
+                className="h-9 rounded-lg border border-slate-200 px-2 text-sm md:col-span-2"
+                placeholder="مدينة الاستلام"
+                value={posReceiverCity}
+                onChange={(event) => setPosReceiverCity(event.target.value)}
+              />
+            </div>
+
             <p className="text-sm font-semibold text-slate-800">بنود الفاتورة</p>
             {posItems.length === 0 ? (
               <p className="text-sm text-slate-500">لم تتم إضافة منتجات بعد.</p>
@@ -1444,11 +1679,11 @@ export function EnterpriseCustomersManager() {
                 <select
                   className="h-9 w-full rounded-lg border border-slate-200 px-2 text-sm"
                   value={posPaymentMethod}
-                  onChange={(event) => setPosPaymentMethod(event.target.value as "cash" | "card" | "transfer")}
+                  onChange={(event) => setPosPaymentMethod(event.target.value as SalesInvoice["paymentMethod"])}
                 >
-                  <option value="cash">نقد</option>
-                  <option value="card">شبكة</option>
-                  <option value="transfer">تحويل</option>
+                  <option value="bank_transfer">دفع بنكي</option>
+                  <option value="cod">عند الاستلام</option>
+                  <option value="other">طرق أخرى</option>
                 </select>
               </div>
 
@@ -1465,6 +1700,37 @@ export function EnterpriseCustomersManager() {
                 </select>
               </div>
             </div>
+
+            {posPaymentMethod === "other" ? (
+              <div className="grid grid-cols-1 gap-2 rounded-lg border border-slate-200 bg-white p-3 md:grid-cols-2">
+                <div>
+                  <p className="mb-1 text-xs text-slate-600">المبلغ المستلم</p>
+                  <input
+                    type="number"
+                    min={0}
+                    className="h-9 w-full rounded-lg border border-slate-200 px-2 text-sm"
+                    value={posReceivedAmount}
+                    onChange={(event) => setPosReceivedAmount(event.target.value)}
+                  />
+                </div>
+                <div>
+                  <p className="mb-1 text-xs text-slate-600">المبلغ المتبقي</p>
+                  <input
+                    type="number"
+                    className="h-9 w-full rounded-lg border border-slate-200 bg-slate-100 px-2 text-sm"
+                    value={posRemainingAmount}
+                    readOnly
+                  />
+                </div>
+              </div>
+            ) : null}
+
+            <textarea
+              className="min-h-[80px] rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              placeholder="ملاحظات التسليم"
+              value={posDeliveryNotes}
+              onChange={(event) => setPosDeliveryNotes(event.target.value)}
+            />
           </div>
         </div>
       </AppModal>
