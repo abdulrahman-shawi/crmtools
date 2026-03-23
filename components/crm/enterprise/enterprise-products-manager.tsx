@@ -11,11 +11,18 @@ import { SectionHeader } from "@/components/ui/section-header";
 
 type EntryType = "product" | "category";
 type DiscountType = "percentage" | "fixed";
+type CatalogFilter = "product" | "category";
 
 interface ProductImage {
   id: string;
   name: string;
   url: string;
+}
+
+interface VariantPrice {
+  id: string;
+  name: string;
+  price: number;
 }
 
 interface ProductEntry {
@@ -28,6 +35,8 @@ interface ProductEntry {
   hasDiscount: boolean;
   discountType: DiscountType | null;
   discountValue: number;
+  colors: VariantPrice[];
+  sizes: VariantPrice[];
   images: ProductImage[];
 }
 
@@ -53,6 +62,12 @@ interface ProductFormState {
   hasDiscount: boolean;
   discountType: DiscountType;
   discountValue: string;
+  colorName: string;
+  colorPrice: string;
+  colors: VariantPrice[];
+  sizeName: string;
+  sizePrice: string;
+  sizes: VariantPrice[];
   images: ProductImage[];
 }
 
@@ -74,6 +89,14 @@ const initialEntries: CatalogEntry[] = [
     hasDiscount: true,
     discountType: "percentage",
     discountValue: 10,
+    colors: [
+      { id: "prd_1_color_1", name: "أسود", price: 1500 },
+      { id: "prd_1_color_2", name: "أبيض", price: 1550 },
+    ],
+    sizes: [
+      { id: "prd_1_size_1", name: "صغير", price: 1450 },
+      { id: "prd_1_size_2", name: "كبير", price: 1600 },
+    ],
     images: [],
   },
 ];
@@ -90,6 +113,12 @@ const initialFormState: ProductFormState = {
   hasDiscount: false,
   discountType: "percentage",
   discountValue: "",
+  colorName: "",
+  colorPrice: "",
+  colors: [],
+  sizeName: "",
+  sizePrice: "",
+  sizes: [],
   images: [],
 };
 
@@ -101,7 +130,9 @@ function toSearchText(row: CatalogEntry): string {
     return `${row.categoryName} ${row.categoryColor} ${row.categoryNotes} تصنيف`;
   }
 
-  return `${row.productName} ${row.price} ${row.quantity} ${row.wholesalePrice} ${row.discountType ?? ""} ${row.discountValue} منتج`;
+  return `${row.productName} ${row.price} ${row.quantity} ${row.wholesalePrice} ${row.discountType ?? ""} ${row.discountValue} ${row.colors
+    .map((color) => `${color.name} ${color.price}`)
+    .join(" ")} ${row.sizes.map((size) => `${size.name} ${size.price}`).join(" ")} منتج`;
 }
 
 /**
@@ -116,6 +147,17 @@ function mapFilesToImages(files: File[]): ProductImage[] {
 }
 
 /**
+ * Builds a color or size variant row with price.
+ */
+function buildVariant(name: string, price: number, prefix: string): VariantPrice {
+  return {
+    id: `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    name,
+    price,
+  };
+}
+
+/**
  * Manages CRM enterprise products and categories in one page.
  */
 export function EnterpriseProductsManager() {
@@ -123,7 +165,13 @@ export function EnterpriseProductsManager() {
   const [page, setPage] = useState(1);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [catalogFilter, setCatalogFilter] = useState<CatalogFilter>("product");
   const [formState, setFormState] = useState<ProductFormState>(initialFormState);
+
+  const filteredRows = useMemo(
+    () => rows.filter((row) => row.type === catalogFilter),
+    [rows, catalogFilter]
+  );
 
   const totals = useMemo(() => {
     const productsCount = rows.filter((row) => row.type === "product").length;
@@ -153,7 +201,7 @@ export function EnterpriseProductsManager() {
         header: "التفاصيل",
         accessor: (row) =>
           row.type === "product"
-            ? `صور: ${row.images.length}`
+            ? `ألوان: ${row.colors.length} | قياسات: ${row.sizes.length} | صور: ${row.images.length}`
             : `اللون: ${row.categoryColor}`,
       },
       {
@@ -235,6 +283,12 @@ export function EnterpriseProductsManager() {
         hasDiscount: false,
         discountType: "percentage",
         discountValue: "",
+        colorName: "",
+        colorPrice: "",
+        colors: [],
+        sizeName: "",
+        sizePrice: "",
+        sizes: [],
         images: [],
       });
     } else {
@@ -250,6 +304,12 @@ export function EnterpriseProductsManager() {
         hasDiscount: row.hasDiscount,
         discountType: row.discountType ?? "percentage",
         discountValue: row.hasDiscount ? String(row.discountValue) : "",
+        colorName: "",
+        colorPrice: "",
+        colors: row.colors,
+        sizeName: "",
+        sizePrice: "",
+        sizes: row.sizes,
         images: row.images,
       });
     }
@@ -283,6 +343,76 @@ export function EnterpriseProductsManager() {
     setFormState((prev) => ({
       ...prev,
       images: prev.images.filter((image) => image.id !== imageId),
+    }));
+  }
+
+  /**
+   * Adds a priced color option to the current product.
+   */
+  function addColorOption() {
+    const name = formState.colorName.trim();
+    const price = Number(formState.colorPrice || 0);
+
+    if (!name) {
+      toast.error("اسم اللون مطلوب");
+      return;
+    }
+
+    if (Number.isNaN(price) || price <= 0) {
+      toast.error("سعر اللون غير صحيح");
+      return;
+    }
+
+    setFormState((prev) => ({
+      ...prev,
+      colorName: "",
+      colorPrice: "",
+      colors: [...prev.colors, buildVariant(name, price, "color")],
+    }));
+  }
+
+  /**
+   * Adds a priced size option to the current product.
+   */
+  function addSizeOption() {
+    const name = formState.sizeName.trim();
+    const price = Number(formState.sizePrice || 0);
+
+    if (!name) {
+      toast.error("اسم القياس مطلوب");
+      return;
+    }
+
+    if (Number.isNaN(price) || price <= 0) {
+      toast.error("سعر القياس غير صحيح");
+      return;
+    }
+
+    setFormState((prev) => ({
+      ...prev,
+      sizeName: "",
+      sizePrice: "",
+      sizes: [...prev.sizes, buildVariant(name, price, "size")],
+    }));
+  }
+
+  /**
+   * Removes one priced color option.
+   */
+  function removeColorOption(variantId: string) {
+    setFormState((prev) => ({
+      ...prev,
+      colors: prev.colors.filter((color) => color.id !== variantId),
+    }));
+  }
+
+  /**
+   * Removes one priced size option.
+   */
+  function removeSizeOption(variantId: string) {
+    setFormState((prev) => ({
+      ...prev,
+      sizes: prev.sizes.filter((size) => size.id !== variantId),
     }));
   }
 
@@ -354,6 +484,8 @@ export function EnterpriseProductsManager() {
         hasDiscount: formState.hasDiscount,
         discountType: formState.hasDiscount ? formState.discountType : null,
         discountValue: formState.hasDiscount ? discountValue : 0,
+        colors: formState.colors,
+        sizes: formState.sizes,
         images: formState.images,
       };
 
@@ -391,9 +523,29 @@ export function EnterpriseProductsManager() {
         title="إدارة المنتجات والتصنيفات"
         description="يمكنك إضافة منتج أو تصنيف من نفس الشاشة بنموذج ذكي حسب نوع الإدخال."
       >
-        <Button leftIcon={<Plus className="h-4 w-4" />} onClick={openCreateModal}>
-          إضافة منتج أو تصنيف
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setCatalogFilter("product")}
+            className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${
+              catalogFilter === "product" ? "bg-blue-600 text-white" : "border border-slate-200 text-slate-700"
+            }`}
+          >
+            عرض المنتجات
+          </button>
+          <button
+            type="button"
+            onClick={() => setCatalogFilter("category")}
+            className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${
+              catalogFilter === "category" ? "bg-emerald-600 text-white" : "border border-slate-200 text-slate-700"
+            }`}
+          >
+            عرض التصنيفات
+          </button>
+          <Button leftIcon={<Plus className="h-4 w-4" />} onClick={openCreateModal}>
+            إضافة منتج أو تصنيف
+          </Button>
+        </div>
       </SectionHeader>
 
       <div className="grid gap-4 md:grid-cols-3">
@@ -418,17 +570,20 @@ export function EnterpriseProductsManager() {
       </div>
 
       <DynamicCard>
-        <DynamicCard.Header title="قائمة المنتجات والتصنيفات" description="بحث وتعديل وحذف من جدول موحد." />
+        <DynamicCard.Header
+          title={catalogFilter === "product" ? "قائمة المنتجات" : "قائمة التصنيفات"}
+          description="بحث وتعديل وحذف من جدول موحد."
+        />
         <DynamicCard.Content className="pt-4">
           <DataTable
             columns={columns}
-            data={rows}
+            data={filteredRows}
             dir="rtl"
             pageSize={8}
-            totalCount={rows.length}
+            totalCount={filteredRows.length}
             currentPage={page}
             onPageChange={setPage}
-            title="المنتجات والتصنيفات"
+            title={catalogFilter === "product" ? "المنتجات" : "التصنيفات"}
             getRowSearchText={toSearchText}
           />
         </DynamicCard.Content>
@@ -519,6 +674,82 @@ export function EnterpriseProductsManager() {
                 value={formState.wholesalePrice}
                 onChange={(event) => setFormState((prev) => ({ ...prev, wholesalePrice: event.target.value }))}
               />
+
+              <div className="space-y-3 rounded-lg border border-slate-200 p-3 md:col-span-2">
+                <p className="text-sm font-semibold text-slate-700">ألوان المنتج مع السعر</p>
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_180px_auto]">
+                  <input
+                    className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
+                    placeholder="اسم اللون"
+                    value={formState.colorName}
+                    onChange={(event) => setFormState((prev) => ({ ...prev, colorName: event.target.value }))}
+                  />
+                  <input
+                    type="number"
+                    className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
+                    placeholder="سعر اللون"
+                    value={formState.colorPrice}
+                    onChange={(event) => setFormState((prev) => ({ ...prev, colorPrice: event.target.value }))}
+                  />
+                  <Button type="button" onClick={addColorOption}>إضافة لون</Button>
+                </div>
+
+                {formState.colors.length > 0 ? (
+                  <div className="space-y-2">
+                    {formState.colors.map((color) => (
+                      <div key={color.id} className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-sm">
+                        <span>{color.name}</span>
+                        <div className="flex items-center gap-3">
+                          <span>{color.price.toLocaleString()}</span>
+                          <button type="button" className="text-red-600 hover:underline" onClick={() => removeColorOption(color.id)}>
+                            حذف
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate-500">لا توجد ألوان مضافة.</p>
+                )}
+              </div>
+
+              <div className="space-y-3 rounded-lg border border-slate-200 p-3 md:col-span-2">
+                <p className="text-sm font-semibold text-slate-700">قياسات المنتج مع السعر</p>
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_180px_auto]">
+                  <input
+                    className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
+                    placeholder="اسم القياس"
+                    value={formState.sizeName}
+                    onChange={(event) => setFormState((prev) => ({ ...prev, sizeName: event.target.value }))}
+                  />
+                  <input
+                    type="number"
+                    className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
+                    placeholder="سعر القياس"
+                    value={formState.sizePrice}
+                    onChange={(event) => setFormState((prev) => ({ ...prev, sizePrice: event.target.value }))}
+                  />
+                  <Button type="button" onClick={addSizeOption}>إضافة قياس</Button>
+                </div>
+
+                {formState.sizes.length > 0 ? (
+                  <div className="space-y-2">
+                    {formState.sizes.map((size) => (
+                      <div key={size.id} className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-sm">
+                        <span>{size.name}</span>
+                        <div className="flex items-center gap-3">
+                          <span>{size.price.toLocaleString()}</span>
+                          <button type="button" className="text-red-600 hover:underline" onClick={() => removeSizeOption(size.id)}>
+                            حذف
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate-500">لا توجد قياسات مضافة.</p>
+                )}
+              </div>
 
               <div className="md:col-span-2 rounded-lg border border-slate-200 p-3">
                 <label className="flex items-center gap-2 text-sm text-slate-700">
