@@ -15,7 +15,7 @@ interface EnterpriseCustomer {
   companyName: string;
   companySize: "medium" | "large";
   industry: string;
-  contactPerson: string;
+  contactPersons: string[];
   phone: string;
   email: string;
   status: "lead" | "active" | "at-risk";
@@ -39,7 +39,7 @@ interface CustomerFormState {
   companyName: string;
   companySize: EnterpriseCustomer["companySize"];
   industry: string;
-  contactPerson: string;
+  contactPersons: string[];
   phone: string;
   email: string;
   status: EnterpriseCustomer["status"];
@@ -150,7 +150,7 @@ const initialFormState: CustomerFormState = {
   companyName: "",
   companySize: "medium",
   industry: "",
-  contactPerson: "",
+  contactPersons: [],
   phone: "",
   email: "",
   status: "lead",
@@ -168,6 +168,14 @@ const initialCommunicationFormState: CommunicationFormState = {
   message: "",
   lastContactSummary: "",
 };
+
+const contactOwnerOptions = [
+  "أحمد الزهراني",
+  "ريم القحطاني",
+  "ليلى عمر",
+  "محمد العتيبي",
+  "سارة الحمد",
+];
 
 /**
  * Converts unknown numeric input to a safe number with fallback.
@@ -264,7 +272,7 @@ const initialCustomers: EnterpriseCustomer[] = [
     companyName: "شركة النخبة للتقنية",
     companySize: "large",
     industry: "تقنية معلومات",
-    contactPerson: "أحمد الزهراني",
+    contactPersons: ["أحمد الزهراني"],
     phone: "0501234567",
     email: "a.alzahrani@nukhba.sa",
     status: "active",
@@ -279,7 +287,7 @@ const initialCustomers: EnterpriseCustomer[] = [
     companyName: "مؤسسة رواد الأعمال",
     companySize: "medium",
     industry: "خدمات أعمال",
-    contactPerson: "ريم القحطاني",
+    contactPersons: ["ريم القحطاني"],
     phone: "0559876543",
     email: "reem@rowad.sa",
     status: "lead",
@@ -294,7 +302,7 @@ const initialCustomers: EnterpriseCustomer[] = [
     companyName: "مجموعة المجد اللوجستية",
     companySize: "large",
     industry: "لوجستيات",
-    contactPerson: "ليلى عمر",
+    contactPersons: ["ليلى عمر"],
     phone: "0532468101",
     email: "l.omar@majdlog.com",
     status: "at-risk",
@@ -563,7 +571,10 @@ export function EnterpriseCustomersManager() {
       },
       { header: "الحجم", accessor: (row) => sizeLabel[row.companySize] },
       { header: "القطاع", accessor: "industry" },
-      { header: "مسؤول التواصل", accessor: "contactPerson" },
+      {
+        header: "مسؤول التواصل",
+        accessor: (row) => row.contactPersons.join("، "),
+      },
       { header: "الجوال", accessor: "phone" },
       {
         header: "الحالة",
@@ -638,7 +649,7 @@ export function EnterpriseCustomersManager() {
       companyName: customer.companyName,
       companySize: customer.companySize,
       industry: customer.industry,
-      contactPerson: customer.contactPerson,
+      contactPersons: customer.contactPersons,
       phone: customer.phone,
       email: customer.email,
       status: customer.status,
@@ -659,7 +670,7 @@ export function EnterpriseCustomersManager() {
     setCommunicationFormState({
       channel: "call",
       date: new Date().toISOString().slice(0, 10),
-      agent: customer.contactPerson,
+      agent: customer.contactPersons[0] ?? "",
       message: "",
       lastContactSummary: customer.lastCommunication,
     });
@@ -852,7 +863,7 @@ export function EnterpriseCustomersManager() {
    * يحفظ العميل الجديد أو تحديث العميل الحالي.
    */
   function handleSave() {
-    if (!formState.companyName.trim() || !formState.contactPerson.trim() || !formState.phone.trim()) {
+    if (!formState.companyName.trim() || formState.contactPersons.length === 0 || !formState.phone.trim()) {
       toast.error("يرجى تعبئة الحقول الأساسية");
       return;
     }
@@ -867,7 +878,7 @@ export function EnterpriseCustomersManager() {
       companyName: formState.companyName.trim(),
       companySize: formState.companySize,
       industry: formState.industry.trim(),
-      contactPerson: formState.contactPerson.trim(),
+      contactPersons: formState.contactPersons,
       phone: formState.phone.trim(),
       email: formState.email.trim(),
       status: formState.status,
@@ -1020,7 +1031,7 @@ export function EnterpriseCustomersManager() {
                 .map((order) => `${order.orderNo} ${order.total} ${order.date}`)
                 .join(" ");
 
-              return `${customer.companyName} ${sizeLabel[customer.companySize]} ${customer.industry} ${customer.contactPerson} ${statusLabel[customer.status].label} ${tierLabel[customer.tier].label} ${customer.lastCommunication} ${customer.notes} ${communicationText} ${invoiceText} ${orderText}`;
+              return `${customer.companyName} ${sizeLabel[customer.companySize]} ${customer.industry} ${customer.contactPersons.join(" ")} ${statusLabel[customer.status].label} ${tierLabel[customer.tier].label} ${customer.lastCommunication} ${customer.notes} ${communicationText} ${invoiceText} ${orderText}`;
             }}
           />
         </DynamicCard.Content>
@@ -1063,12 +1074,24 @@ export function EnterpriseCustomersManager() {
             value={formState.industry}
             onChange={(event) => setFormState((prev) => ({ ...prev, industry: event.target.value }))}
           />
-          <input
-            className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
-            placeholder="مسؤول التواصل"
-            value={formState.contactPerson}
-            onChange={(event) => setFormState((prev) => ({ ...prev, contactPerson: event.target.value }))}
-          />
+          <div className="space-y-1 md:col-span-2">
+            <p className="text-xs text-slate-600">مسؤول التواصل (يمكن اختيار أكثر من مسؤول)</p>
+            <select
+              multiple
+              className="min-h-[96px] w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              value={formState.contactPersons}
+              onChange={(event) => {
+                const selectedValues = Array.from(event.target.selectedOptions, (option) => option.value);
+                setFormState((prev) => ({ ...prev, contactPersons: selectedValues }));
+              }}
+            >
+              {contactOwnerOptions.map((owner) => (
+                <option key={owner} value={owner}>
+                  {owner}
+                </option>
+              ))}
+            </select>
+          </div>
           <input
             className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
             placeholder="رقم الجوال"
