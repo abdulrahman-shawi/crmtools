@@ -70,6 +70,87 @@ interface InvoiceDetailsPageProps {
 }
 
 /**
+ * Converts unknown numeric input to a safe number with fallback.
+ */
+function toSafeNumber(value: unknown, fallback = 0): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+/**
+ * Normalizes invoice line item payloads loaded from localStorage.
+ */
+function normalizeLineItem(raw: unknown): PosLineItem | null {
+  if (!raw || typeof raw !== "object") {
+    return null;
+  }
+
+  const item = raw as Partial<PosLineItem>;
+  const id = typeof item.id === "string" ? item.id : `line_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const productId = typeof item.productId === "string" ? item.productId : "unknown_product";
+  const name = typeof item.name === "string" ? item.name : "منتج";
+  const sku = typeof item.sku === "string" ? item.sku : "N/A";
+  const price = Math.max(0, toSafeNumber(item.price, 0));
+  const quantity = Math.max(1, Math.trunc(toSafeNumber(item.quantity, 1)));
+
+  return { id, productId, name, sku, price, quantity };
+}
+
+/**
+ * Normalizes invoice payloads to support legacy data shape.
+ */
+function normalizeSalesInvoice(raw: unknown): SalesInvoice | null {
+  if (!raw || typeof raw !== "object") {
+    return null;
+  }
+
+  const invoice = raw as Partial<SalesInvoice>;
+  if (typeof invoice.id !== "string" || typeof invoice.customerId !== "string") {
+    return null;
+  }
+
+  const items = Array.isArray(invoice.items)
+    ? invoice.items.map(normalizeLineItem).filter((item): item is PosLineItem => item !== null)
+    : [];
+
+  const subtotal = Math.max(0, toSafeNumber(invoice.subtotal, items.reduce((sum, item) => sum + item.price * item.quantity, 0)));
+  const discountAmount = Math.max(0, Math.min(toSafeNumber(invoice.discountAmount, 0), subtotal));
+  const taxRate = Math.max(0, toSafeNumber(invoice.taxRate, 0));
+  const taxableAmount = Math.max(0, subtotal - discountAmount);
+  const taxAmount = Math.max(0, toSafeNumber(invoice.taxAmount, (taxableAmount * taxRate) / 100));
+  const total = Math.max(0, toSafeNumber(invoice.total, taxableAmount + taxAmount));
+
+  const paymentMethod: SalesInvoice["paymentMethod"] =
+    invoice.paymentMethod === "cash" || invoice.paymentMethod === "card" || invoice.paymentMethod === "transfer"
+      ? invoice.paymentMethod
+      : "cash";
+
+  const paymentStatus: SalesInvoice["paymentStatus"] =
+    invoice.paymentStatus === "unpaid" || invoice.paymentStatus === "partial" || invoice.paymentStatus === "paid"
+      ? invoice.paymentStatus
+      : "unpaid";
+
+  const status: SalesInvoice["status"] = invoice.status === "draft" || invoice.status === "issued" ? invoice.status : "issued";
+
+  return {
+    id: invoice.id,
+    invoiceNo: typeof invoice.invoiceNo === "string" ? invoice.invoiceNo : `INV-${invoice.id.slice(-6)}`,
+    customerId: invoice.customerId,
+    customerName: typeof invoice.customerName === "string" ? invoice.customerName : "عميل",
+    date: typeof invoice.date === "string" ? invoice.date : new Date().toISOString().slice(0, 10),
+    paymentMethod,
+    paymentStatus,
+    subtotal,
+    discountAmount,
+    taxRate,
+    taxAmount,
+    total,
+    status,
+    items,
+  };
+}
+
+/**
  * Shows and edits POS invoice details for the selected invoice.
  */
 export default function InvoiceDetailsPage({ params }: InvoiceDetailsPageProps) {
@@ -86,8 +167,16 @@ export default function InvoiceDetailsPage({ params }: InvoiceDetailsPageProps) 
 
     try {
       const raw = window.localStorage.getItem(SALES_INVOICES_STORAGE_KEY);
-      const parsed = raw ? (JSON.parse(raw) as SalesInvoice[]) : [];
-      setInvoices(Array.isArray(parsed) ? parsed : []);
+      const parsed = raw ? (JSON.parse(raw) as unknown) : [];
+
+      if (Array.isArray(parsed)) {
+        const normalized = parsed
+          .map((invoice) => normalizeSalesInvoice(invoice))
+          .filter((invoice): invoice is SalesInvoice => invoice !== null);
+        setInvoices(normalized);
+      } else {
+        setInvoices([]);
+      }
     } catch {
       setInvoices([]);
     } finally {
