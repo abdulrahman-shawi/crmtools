@@ -23,12 +23,15 @@ interface VariantPrice {
   id: string;
   name: string;
   price: number;
+  hex?: string;
 }
 
 interface ProductEntry {
   id: string;
   type: "product";
   productName: string;
+  categoryName: string;
+  notes: string;
   price: number;
   quantity: number;
   wholesalePrice: number;
@@ -56,12 +59,15 @@ interface ProductFormState {
   categoryColor: string;
   categoryNotes: string;
   productName: string;
+  productCategoryName: string;
+  notes: string;
   price: string;
   quantity: string;
   wholesalePrice: string;
   hasDiscount: boolean;
   discountType: DiscountType;
   discountValue: string;
+  colorHex: string;
   colorName: string;
   colorPrice: string;
   colors: VariantPrice[];
@@ -83,6 +89,8 @@ const initialEntries: CatalogEntry[] = [
     id: "prd_1",
     type: "product",
     productName: "جهاز نقاط بيع",
+    categoryName: "إلكترونيات",
+    notes: "مناسب للمحلات ونقاط البيع الصغيرة والمتوسطة.",
     price: 1500,
     quantity: 20,
     wholesalePrice: 1300,
@@ -90,8 +98,8 @@ const initialEntries: CatalogEntry[] = [
     discountType: "percentage",
     discountValue: 10,
     colors: [
-      { id: "prd_1_color_1", name: "أسود", price: 1500 },
-      { id: "prd_1_color_2", name: "أبيض", price: 1550 },
+      { id: "prd_1_color_1", name: "أسود", price: 1500, hex: "#111827" },
+      { id: "prd_1_color_2", name: "أبيض", price: 1550, hex: "#f8fafc" },
     ],
     sizes: [
       { id: "prd_1_size_1", name: "صغير", price: 1450 },
@@ -107,12 +115,15 @@ const initialFormState: ProductFormState = {
   categoryColor: "#2563eb",
   categoryNotes: "",
   productName: "",
+  productCategoryName: "",
+  notes: "",
   price: "",
   quantity: "",
   wholesalePrice: "",
   hasDiscount: false,
   discountType: "percentage",
   discountValue: "",
+  colorHex: "#2563eb",
   colorName: "",
   colorPrice: "",
   colors: [],
@@ -130,8 +141,8 @@ function toSearchText(row: CatalogEntry): string {
     return `${row.categoryName} ${row.categoryColor} ${row.categoryNotes} تصنيف`;
   }
 
-  return `${row.productName} ${row.price} ${row.quantity} ${row.wholesalePrice} ${row.discountType ?? ""} ${row.discountValue} ${row.colors
-    .map((color) => `${color.name} ${color.price}`)
+  return `${row.productName} ${row.categoryName} ${row.notes} ${row.price} ${row.quantity} ${row.wholesalePrice} ${row.discountType ?? ""} ${row.discountValue} ${row.colors
+    .map((color) => `${color.name} ${color.hex ?? ""} ${color.price}`)
     .join(" ")} ${row.sizes.map((size) => `${size.name} ${size.price}`).join(" ")} منتج`;
 }
 
@@ -149,11 +160,12 @@ function mapFilesToImages(files: File[]): ProductImage[] {
 /**
  * Builds a color or size variant row with price.
  */
-function buildVariant(name: string, price: number, prefix: string): VariantPrice {
+function buildVariant(name: string, price: number, prefix: string, hex?: string): VariantPrice {
   return {
     id: `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
     name,
     price,
+    hex,
   };
 }
 
@@ -167,10 +179,21 @@ export function EnterpriseProductsManager() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [catalogFilter, setCatalogFilter] = useState<CatalogFilter>("product");
   const [formState, setFormState] = useState<ProductFormState>(initialFormState);
+  const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
 
   const filteredRows = useMemo(
     () => rows.filter((row) => row.type === catalogFilter),
     [rows, catalogFilter]
+  );
+
+  const selectedProduct = useMemo(
+    () => rows.find((row): row is ProductEntry => row.type === "product" && row.id === selectedProductId) ?? null,
+    [rows, selectedProductId]
+  );
+
+  const categoryOptions = useMemo(
+    () => rows.filter((row): row is CategoryEntry => row.type === "category"),
+    [rows]
   );
 
   const totals = useMemo(() => {
@@ -195,7 +218,18 @@ export function EnterpriseProductsManager() {
       },
       {
         header: "الاسم",
-        accessor: (row) => (row.type === "product" ? row.productName : row.categoryName),
+        accessor: (row) =>
+          row.type === "product" ? (
+            <button
+              type="button"
+              onClick={() => setSelectedProductId(row.id)}
+              className="font-semibold text-blue-700 hover:underline"
+            >
+              {row.productName}
+            </button>
+          ) : (
+            row.categoryName
+          ),
       },
       {
         header: "التفاصيل",
@@ -207,6 +241,10 @@ export function EnterpriseProductsManager() {
       {
         header: "السعر",
         accessor: (row) => (row.type === "product" ? row.price.toLocaleString() : "-"),
+      },
+      {
+        header: "التصنيف",
+        accessor: (row) => (row.type === "product" ? row.categoryName || "-" : "-"),
       },
       {
         header: "الكمية",
@@ -277,12 +315,15 @@ export function EnterpriseProductsManager() {
         categoryColor: row.categoryColor,
         categoryNotes: row.categoryNotes,
         productName: "",
+        productCategoryName: "",
+        notes: "",
         price: "",
         quantity: "",
         wholesalePrice: "",
         hasDiscount: false,
         discountType: "percentage",
         discountValue: "",
+        colorHex: "#2563eb",
         colorName: "",
         colorPrice: "",
         colors: [],
@@ -298,12 +339,15 @@ export function EnterpriseProductsManager() {
         categoryColor: "#2563eb",
         categoryNotes: "",
         productName: row.productName,
+        productCategoryName: row.categoryName,
+        notes: row.notes,
         price: String(row.price),
         quantity: String(row.quantity),
         wholesalePrice: String(row.wholesalePrice),
         hasDiscount: row.hasDiscount,
         discountType: row.discountType ?? "percentage",
         discountValue: row.hasDiscount ? String(row.discountValue) : "",
+        colorHex: "#2563eb",
         colorName: "",
         colorPrice: "",
         colors: row.colors,
@@ -352,6 +396,7 @@ export function EnterpriseProductsManager() {
   function addColorOption() {
     const name = formState.colorName.trim();
     const price = Number(formState.colorPrice || 0);
+    const hex = formState.colorHex;
 
     if (!name) {
       toast.error("اسم اللون مطلوب");
@@ -365,9 +410,10 @@ export function EnterpriseProductsManager() {
 
     setFormState((prev) => ({
       ...prev,
+      colorHex: "#2563eb",
       colorName: "",
       colorPrice: "",
-      colors: [...prev.colors, buildVariant(name, price, "color")],
+      colors: [...prev.colors, buildVariant(name, price, "color", hex)],
     }));
   }
 
@@ -478,6 +524,8 @@ export function EnterpriseProductsManager() {
         id: editingId ?? `prd_${Date.now()}`,
         type: "product",
         productName: formState.productName.trim(),
+        categoryName: formState.productCategoryName.trim(),
+        notes: formState.notes.trim(),
         price,
         quantity,
         wholesalePrice,
@@ -653,6 +701,18 @@ export function EnterpriseProductsManager() {
                 value={formState.productName}
                 onChange={(event) => setFormState((prev) => ({ ...prev, productName: event.target.value }))}
               />
+              <select
+                className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
+                value={formState.productCategoryName}
+                onChange={(event) => setFormState((prev) => ({ ...prev, productCategoryName: event.target.value }))}
+              >
+                <option value="">اختر التصنيف</option>
+                {categoryOptions.map((category) => (
+                  <option key={category.id} value={category.categoryName}>
+                    {category.categoryName}
+                  </option>
+                ))}
+              </select>
               <input
                 type="number"
                 className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
@@ -674,10 +734,22 @@ export function EnterpriseProductsManager() {
                 value={formState.wholesalePrice}
                 onChange={(event) => setFormState((prev) => ({ ...prev, wholesalePrice: event.target.value }))}
               />
+              <textarea
+                className="min-h-[90px] rounded-lg border border-slate-200 px-3 py-2 text-sm md:col-span-2"
+                placeholder="ملاحظات المنتج"
+                value={formState.notes}
+                onChange={(event) => setFormState((prev) => ({ ...prev, notes: event.target.value }))}
+              />
 
               <div className="space-y-3 rounded-lg border border-slate-200 p-3 md:col-span-2">
                 <p className="text-sm font-semibold text-slate-700">ألوان المنتج مع السعر</p>
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_180px_auto]">
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-[120px_1fr_180px_auto]">
+                  <input
+                    type="color"
+                    className="h-10 w-full rounded-lg border border-slate-200 p-1"
+                    value={formState.colorHex}
+                    onChange={(event) => setFormState((prev) => ({ ...prev, colorHex: event.target.value }))}
+                  />
                   <input
                     className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
                     placeholder="اسم اللون"
@@ -698,7 +770,10 @@ export function EnterpriseProductsManager() {
                   <div className="space-y-2">
                     {formState.colors.map((color) => (
                       <div key={color.id} className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-sm">
-                        <span>{color.name}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="h-4 w-4 rounded-full border border-slate-300" style={{ backgroundColor: color.hex ?? "#2563eb" }} />
+                          <span>{color.name}</span>
+                        </div>
                         <div className="flex items-center gap-3">
                           <span>{color.price.toLocaleString()}</span>
                           <button type="button" className="text-red-600 hover:underline" onClick={() => removeColorOption(color.id)}>
@@ -825,6 +900,91 @@ export function EnterpriseProductsManager() {
             </div>
           )}
         </div>
+      </AppModal>
+
+      <AppModal
+        isOpen={selectedProduct !== null}
+        onClose={() => setSelectedProductId(null)}
+        title={selectedProduct ? `تفاصيل المنتج: ${selectedProduct.productName}` : "تفاصيل المنتج"}
+        size="xl"
+        footer={
+          <Button variant="outline" onClick={() => setSelectedProductId(null)}>
+            إغلاق
+          </Button>
+        }
+      >
+        {selectedProduct ? (
+          <div className="space-y-4">
+            <div className="grid gap-3 rounded-lg border border-slate-200 p-4 md:grid-cols-2">
+              <p>اسم المنتج: <span className="font-semibold">{selectedProduct.productName}</span></p>
+              <p>التصنيف: <span className="font-semibold">{selectedProduct.categoryName || "غير محدد"}</span></p>
+              <p>السعر: <span className="font-semibold">{selectedProduct.price.toLocaleString()}</span></p>
+              <p>سعر الجملة: <span className="font-semibold">{selectedProduct.wholesalePrice.toLocaleString()}</span></p>
+              <p>الكمية: <span className="font-semibold">{selectedProduct.quantity}</span></p>
+              <p>
+                الخصم: <span className="font-semibold">{selectedProduct.hasDiscount ? (selectedProduct.discountType === "percentage" ? `${selectedProduct.discountValue}%` : `${selectedProduct.discountValue} ثابت`) : "لا يوجد"}</span>
+              </p>
+            </div>
+
+            <div className="rounded-lg border border-slate-200 p-4">
+              <p className="mb-2 text-sm font-semibold text-slate-800">الملاحظات</p>
+              <p className="text-sm text-slate-600">{selectedProduct.notes || "لا توجد ملاحظات"}</p>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="rounded-lg border border-slate-200 p-4">
+                <p className="mb-2 text-sm font-semibold text-slate-800">الألوان</p>
+                {selectedProduct.colors.length > 0 ? (
+                  <div className="space-y-2">
+                    {selectedProduct.colors.map((color) => (
+                      <div key={color.id} className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-sm">
+                        <div className="flex items-center gap-2">
+                          <span className="h-4 w-4 rounded-full border border-slate-300" style={{ backgroundColor: color.hex ?? "#2563eb" }} />
+                          <span>{color.name}</span>
+                        </div>
+                        <span>{color.price.toLocaleString()}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-slate-500">لا توجد ألوان.</p>
+                )}
+              </div>
+
+              <div className="rounded-lg border border-slate-200 p-4">
+                <p className="mb-2 text-sm font-semibold text-slate-800">القياسات</p>
+                {selectedProduct.sizes.length > 0 ? (
+                  <div className="space-y-2">
+                    {selectedProduct.sizes.map((size) => (
+                      <div key={size.id} className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-sm">
+                        <span>{size.name}</span>
+                        <span>{size.price.toLocaleString()}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-slate-500">لا توجد قياسات.</p>
+                )}
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-slate-200 p-4">
+              <p className="mb-2 text-sm font-semibold text-slate-800">صور المنتج</p>
+              {selectedProduct.images.length > 0 ? (
+                <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                  {selectedProduct.images.map((image) => (
+                    <div key={image.id} className="rounded-lg border border-slate-200 p-2">
+                      <img src={image.url} alt={image.name} className="h-24 w-full rounded-md object-cover" />
+                      <p className="mt-1 truncate text-xs text-slate-600">{image.name}</p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-slate-500">لا توجد صور للمنتج.</p>
+              )}
+            </div>
+          </div>
+        ) : null}
       </AppModal>
     </section>
   );
