@@ -17,6 +17,29 @@ interface WarehouseRecord {
   createdAt: string;
 }
 
+interface WarehouseAllocationReportItem {
+  warehouseId: string;
+  quantity: number;
+}
+
+interface ProductCatalogForReport {
+  id: string;
+  type: "product" | "category";
+  productName?: string;
+  wholesalePrice?: number;
+  warehouseAllocations?: WarehouseAllocationReportItem[];
+  categoryWarehouseId?: string;
+}
+
+interface WarehouseInventoryReportRow {
+  warehouseId: string;
+  warehouseName: string;
+  productsCount: number;
+  categoriesCount: number;
+  totalQuantity: number;
+  estimatedValue: number;
+}
+
 interface WarehouseFormState {
   name: string;
   country: string;
@@ -24,6 +47,7 @@ interface WarehouseFormState {
 }
 
 const WAREHOUSES_STORAGE_KEY = "crm-enterprise-warehouses";
+const CATALOG_STORAGE_KEY = "crm-enterprise-products-catalog";
 
 const countryOptions = [
   { value: "SA", label: "السعودية" },
@@ -78,6 +102,7 @@ function toSearchText(row: WarehouseRecord): string {
  */
 export function EnterpriseWarehousesManager() {
   const [rows, setRows] = useState<WarehouseRecord[]>(initialWarehouses);
+  const [catalogRows, setCatalogRows] = useState<ProductCatalogForReport[]>([]);
   const [page, setPage] = useState(1);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -108,6 +133,41 @@ export function EnterpriseWarehousesManager() {
       return;
     }
 
+    /**
+     * Loads products catalog rows from localStorage for stock report.
+     */
+    function loadCatalogRows() {
+      try {
+        const raw = window.localStorage.getItem(CATALOG_STORAGE_KEY);
+        if (!raw) {
+          setCatalogRows([]);
+          return;
+        }
+
+        const parsed = JSON.parse(raw) as ProductCatalogForReport[];
+        setCatalogRows(Array.isArray(parsed) ? parsed : []);
+      } catch {
+        setCatalogRows([]);
+      }
+    }
+
+    loadCatalogRows();
+
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === CATALOG_STORAGE_KEY) {
+        loadCatalogRows();
+      }
+    };
+
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
     window.localStorage.setItem(WAREHOUSES_STORAGE_KEY, JSON.stringify(rows));
   }, [rows]);
 
@@ -120,6 +180,43 @@ export function EnterpriseWarehousesManager() {
       countriesCount,
     };
   }, [rows]);
+
+  const warehouseInventoryReport = useMemo<WarehouseInventoryReportRow[]>(() => {
+    return rows.map((warehouse) => {
+      const relatedProducts = catalogRows.filter(
+        (row) => row.type === "product" && row.warehouseAllocations?.some((allocation) => allocation.warehouseId === warehouse.id)
+      );
+
+      const relatedCategories = catalogRows.filter(
+        (row) => row.type === "category" && row.categoryWarehouseId === warehouse.id
+      );
+
+      const totalQuantity = relatedProducts.reduce((sum, product) => {
+        const quantityInWarehouse = (product.warehouseAllocations ?? [])
+          .filter((allocation) => allocation.warehouseId === warehouse.id)
+          .reduce((innerSum, allocation) => innerSum + allocation.quantity, 0);
+
+        return sum + quantityInWarehouse;
+      }, 0);
+
+      const estimatedValue = relatedProducts.reduce((sum, product) => {
+        const quantityInWarehouse = (product.warehouseAllocations ?? [])
+          .filter((allocation) => allocation.warehouseId === warehouse.id)
+          .reduce((innerSum, allocation) => innerSum + allocation.quantity, 0);
+
+        return sum + quantityInWarehouse * Number(product.wholesalePrice ?? 0);
+      }, 0);
+
+      return {
+        warehouseId: warehouse.id,
+        warehouseName: warehouse.name,
+        productsCount: relatedProducts.length,
+        categoriesCount: relatedCategories.length,
+        totalQuantity,
+        estimatedValue,
+      };
+    });
+  }, [rows, catalogRows]);
 
   const columns = useMemo<Column<WarehouseRecord>[]>(
     () => [
@@ -246,6 +343,36 @@ export function EnterpriseWarehousesManager() {
           </DynamicCard.Content>
         </DynamicCard>
       </div>
+
+      <DynamicCard>
+        <DynamicCard.Header title="تقرير مخزون مجمع حسب كل مستودع" description="ملخص الكميات والقيمة التقديرية وعدد المنتجات بكل مستودع." />
+        <DynamicCard.Content className="pt-4">
+          <div className="overflow-x-auto rounded-xl border border-slate-200">
+            <table className="min-w-full text-sm">
+              <thead className="bg-slate-50">
+                <tr>
+                  <th className="p-3 text-right font-semibold text-slate-700">المستودع</th>
+                  <th className="p-3 text-right font-semibold text-slate-700">عدد المنتجات</th>
+                  <th className="p-3 text-right font-semibold text-slate-700">عدد التصنيفات</th>
+                  <th className="p-3 text-right font-semibold text-slate-700">إجمالي الكمية</th>
+                  <th className="p-3 text-right font-semibold text-slate-700">القيمة التقديرية</th>
+                </tr>
+              </thead>
+              <tbody>
+                {warehouseInventoryReport.map((reportRow) => (
+                  <tr key={reportRow.warehouseId} className="border-t border-slate-100">
+                    <td className="p-3 text-slate-800">{reportRow.warehouseName}</td>
+                    <td className="p-3 text-slate-700">{reportRow.productsCount}</td>
+                    <td className="p-3 text-slate-700">{reportRow.categoriesCount}</td>
+                    <td className="p-3 text-slate-700">{reportRow.totalQuantity.toLocaleString()}</td>
+                    <td className="p-3 font-semibold text-emerald-700">{reportRow.estimatedValue.toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </DynamicCard.Content>
+      </DynamicCard>
 
       <DynamicCard>
         <DynamicCard.Header title="قائمة المخازن" description="بحث وتعديل وحذف مخازن النظام." />

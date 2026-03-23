@@ -101,6 +101,7 @@ interface ProductFormState {
 }
 
 const WAREHOUSES_STORAGE_KEY = "crm-enterprise-warehouses";
+const CATALOG_STORAGE_KEY = "crm-enterprise-products-catalog";
 
 const defaultWarehouses: WarehouseOption[] = [
   { id: "wh_1", name: "مخزن الرياض الرئيسي", country: "SA", notes: "المخزن الرئيسي" },
@@ -235,6 +236,7 @@ function isDateInRange(targetDate: string, fromDate: string, toDate: string): bo
 export function EnterpriseProductsManager() {
   const [rows, setRows] = useState<CatalogEntry[]>(initialEntries);
   const [warehouses, setWarehouses] = useState<WarehouseOption[]>(defaultWarehouses);
+  const [isCatalogHydrated, setIsCatalogHydrated] = useState(false);
   const [page, setPage] = useState(1);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -264,6 +266,36 @@ export function EnterpriseProductsManager() {
       // Keep default warehouses when storage is invalid.
     }
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    try {
+      const raw = window.localStorage.getItem(CATALOG_STORAGE_KEY);
+      if (!raw) {
+        return;
+      }
+
+      const parsed = JSON.parse(raw) as CatalogEntry[];
+      if (Array.isArray(parsed)) {
+        setRows(parsed);
+      }
+    } catch {
+      // Keep defaults when catalog storage is invalid.
+    } finally {
+      setIsCatalogHydrated(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !isCatalogHydrated) {
+      return;
+    }
+
+    window.localStorage.setItem(CATALOG_STORAGE_KEY, JSON.stringify(rows));
+  }, [rows, isCatalogHydrated]);
 
   const selectedProduct = useMemo(
     () => rows.find((row): row is ProductEntry => row.type === "product" && row.id === selectedProductId) ?? null,
