@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Pencil, Plus, ShoppingCart, Trash2 } from "lucide-react";
+import { Eye, Pencil, Plus, ShoppingCart, Trash2 } from "lucide-react";
 import toast from "react-hot-toast";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { AppModal } from "@/components/ui/app-modal";
@@ -10,6 +10,8 @@ import DynamicCard from "@/components/ui/dynamicCard";
 import { SectionHeader } from "@/components/ui/section-header";
 
 type ExpenseType = "general" | "purchase";
+type GeneralExpensePeriod = "daily" | "monthly" | "yearly";
+type PurchasePaymentMethod = "bank_transfer" | "cod" | "other";
 
 interface CatalogProduct {
   id: string;
@@ -27,9 +29,16 @@ interface PurchaseItem {
   quantity: number;
 }
 
+interface ShippingCompanyRow {
+  id: string;
+  company: string;
+  avgCost: number;
+}
+
 interface GeneralExpenseDetails {
   expenseName: string;
   expenseQuantity: number;
+  period: GeneralExpensePeriod;
   notes: string;
 }
 
@@ -40,6 +49,12 @@ interface PurchaseExpenseDetails {
   discountAmount: number;
   notes: string;
   items: PurchaseItem[];
+  paymentMethod: PurchasePaymentMethod;
+  paidAmount: number;
+  remainingAmount: number;
+  shippingCompanyId: string | null;
+  shippingCompanyName: string;
+  shippingCost: number;
 }
 
 interface ExpenseRecord {
@@ -56,6 +71,7 @@ interface ExpenseFormState {
   date: string;
   expenseName: string;
   expenseQuantity: string;
+  generalPeriod: GeneralExpensePeriod;
   generalNotes: string;
   supplierName: string;
   country: string;
@@ -63,6 +79,10 @@ interface ExpenseFormState {
   discountAmount: string;
   purchaseNotes: string;
   items: PurchaseItem[];
+  paymentMethod: PurchasePaymentMethod;
+  paidAmount: string;
+  shippingCompanyId: string;
+  shippingCost: string;
 }
 
 interface ProductCatalogStorageRow {
@@ -74,6 +94,7 @@ interface ProductCatalogStorageRow {
 
 const EXPENSES_STORAGE_KEY = "crm-enterprise-expenses";
 const CATALOG_STORAGE_KEY = "crm-enterprise-products-catalog";
+const SHIPPING_COMPANIES_STORAGE_KEY = "crm-enterprise-shipping-companies";
 
 const countryOptions = [
   { value: "SA", label: "السعودية" },
@@ -94,6 +115,12 @@ const fallbackProducts: CatalogProduct[] = [
   { id: "pos_pr_5", name: "WhatsApp Integration", sku: "WA-INT", price: 420 },
 ];
 
+const fallbackShippingCompanies: ShippingCompanyRow[] = [
+  { id: "sh_1", company: "FastShip", avgCost: 22 },
+  { id: "sh_2", company: "CargoLink", avgCost: 12 },
+  { id: "sh_3", company: "BlueLogix", avgCost: 9 },
+];
+
 const initialExpenses: ExpenseRecord[] = [
   {
     id: "exp_1",
@@ -103,9 +130,40 @@ const initialExpenses: ExpenseRecord[] = [
     general: {
       expenseName: "مستلزمات مكتبية",
       expenseQuantity: 10,
+      period: "monthly",
       notes: "شراء ورق وطباعة",
     },
     purchase: null,
+  },
+  {
+    id: "exp_2",
+    type: "purchase",
+    date: "2026-03-23",
+    totalAmount: 1800,
+    general: null,
+    purchase: {
+      supplierName: "مورد التقنية",
+      country: "SA",
+      city: "الرياض",
+      discountAmount: 100,
+      notes: "توريد دفعة أولى",
+      items: [
+        {
+          id: "line_1",
+          productId: "pos_pr_1",
+          name: "CRM Pro License",
+          sku: "CRM-PRO",
+          price: 950,
+          quantity: 2,
+        },
+      ],
+      paymentMethod: "other",
+      paidAmount: 1000,
+      remainingAmount: 800,
+      shippingCompanyId: null,
+      shippingCompanyName: "",
+      shippingCost: 0,
+    },
   },
 ];
 
@@ -114,6 +172,7 @@ const initialFormState: ExpenseFormState = {
   date: new Date().toISOString().slice(0, 10),
   expenseName: "",
   expenseQuantity: "",
+  generalPeriod: "daily",
   generalNotes: "",
   supplierName: "",
   country: "SA",
@@ -121,6 +180,22 @@ const initialFormState: ExpenseFormState = {
   discountAmount: "0",
   purchaseNotes: "",
   items: [],
+  paymentMethod: "bank_transfer",
+  paidAmount: "",
+  shippingCompanyId: "",
+  shippingCost: "",
+};
+
+const generalExpensePeriodLabel: Record<GeneralExpensePeriod, string> = {
+  daily: "يومي",
+  monthly: "شهري",
+  yearly: "سنوي",
+};
+
+const purchasePaymentMethodLabel: Record<PurchasePaymentMethod, string> = {
+  bank_transfer: "بنكي",
+  cod: "عند الاستلام",
+  other: "طرق أخرى",
 };
 
 /**
@@ -145,7 +220,7 @@ function readStorageArray<T>(key: string): T[] {
 }
 
 /**
- * Maps product rows from products catalog storage into POS product list.
+ * Maps product rows from products catalog storage into POS list.
  */
 function mapCatalogProducts(rows: ProductCatalogStorageRow[]): CatalogProduct[] {
   const mapped = rows
@@ -162,15 +237,37 @@ function mapCatalogProducts(rows: ProductCatalogStorageRow[]): CatalogProduct[] 
 }
 
 /**
- * Expense manager with conditional form based on expense type.
+ * Checks if a date is inside optional date boundaries.
+ */
+function isDateInRange(targetDate: string, fromDate: string, toDate: string): boolean {
+  if (fromDate && targetDate < fromDate) {
+    return false;
+  }
+
+  if (toDate && targetDate > toDate) {
+    return false;
+  }
+
+  return true;
+}
+
+/**
+ * Expense manager with separate general/purchase tables and filters.
  */
 export function EnterpriseExpensesManager() {
   const [rows, setRows] = useState<ExpenseRecord[]>(initialExpenses);
   const [catalogProducts, setCatalogProducts] = useState<CatalogProduct[]>(fallbackProducts);
-  const [page, setPage] = useState(1);
+  const [shippingCompanies, setShippingCompanies] = useState<ShippingCompanyRow[]>(fallbackShippingCompanies);
+  const [pageGeneral, setPageGeneral] = useState(1);
+  const [pagePurchase, setPagePurchase] = useState(1);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [detailsExpenseId, setDetailsExpenseId] = useState<string | null>(null);
   const [formState, setFormState] = useState<ExpenseFormState>(initialFormState);
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [generalPeriodFilter, setGeneralPeriodFilter] = useState<"all" | GeneralExpensePeriod>("all");
+  const [generalFilterVisible, setGeneralFilterVisible] = useState(true);
 
   const purchaseSubtotal = useMemo(
     () => formState.items.reduce((sum, item) => sum + item.price * item.quantity, 0),
@@ -188,6 +285,37 @@ export function EnterpriseExpensesManager() {
 
   const purchaseTotal = useMemo(() => Math.max(0, purchaseSubtotal - purchaseDiscount), [purchaseSubtotal, purchaseDiscount]);
 
+  const paidAmountSafe = useMemo(() => {
+    const value = Number(formState.paidAmount || 0);
+    if (Number.isNaN(value) || value < 0) {
+      return 0;
+    }
+
+    return value;
+  }, [formState.paidAmount]);
+
+  const remainingAmountAuto = useMemo(() => {
+    if (formState.paymentMethod !== "other") {
+      return 0;
+    }
+
+    return Math.max(0, purchaseTotal - paidAmountSafe);
+  }, [formState.paymentMethod, purchaseTotal, paidAmountSafe]);
+
+  const selectedShippingCompany = useMemo(
+    () => shippingCompanies.find((item) => item.id === formState.shippingCompanyId) ?? null,
+    [shippingCompanies, formState.shippingCompanyId]
+  );
+
+  const shippingCostResolved = useMemo(() => {
+    const parsed = Number(formState.shippingCost || "");
+    if (formState.shippingCost.trim() !== "" && !Number.isNaN(parsed) && parsed >= 0) {
+      return parsed;
+    }
+
+    return selectedShippingCompany?.avgCost ?? 0;
+  }, [formState.shippingCost, selectedShippingCompany]);
+
   useEffect(() => {
     const storedExpenses = readStorageArray<ExpenseRecord>(EXPENSES_STORAGE_KEY);
     if (storedExpenses.length > 0) {
@@ -196,6 +324,11 @@ export function EnterpriseExpensesManager() {
 
     const catalogRows = readStorageArray<ProductCatalogStorageRow>(CATALOG_STORAGE_KEY);
     setCatalogProducts(mapCatalogProducts(catalogRows));
+
+    const shippingRows = readStorageArray<ShippingCompanyRow>(SHIPPING_COMPANIES_STORAGE_KEY);
+    if (shippingRows.length > 0) {
+      setShippingCompanies(shippingRows);
+    }
   }, []);
 
   useEffect(() => {
@@ -205,6 +338,24 @@ export function EnterpriseExpensesManager() {
 
     window.localStorage.setItem(EXPENSES_STORAGE_KEY, JSON.stringify(rows));
   }, [rows]);
+
+  const detailsExpense = useMemo(
+    () => rows.find((row) => row.id === detailsExpenseId && row.type === "purchase") ?? null,
+    [rows, detailsExpenseId]
+  );
+
+  const filteredGeneralRows = useMemo(() => {
+    return rows
+      .filter((row) => row.type === "general")
+      .filter((row) => isDateInRange(row.date, dateFrom, dateTo))
+      .filter((row) => (generalPeriodFilter === "all" ? true : row.general?.period === generalPeriodFilter));
+  }, [rows, dateFrom, dateTo, generalPeriodFilter]);
+
+  const filteredPurchaseRows = useMemo(() => {
+    return rows
+      .filter((row) => row.type === "purchase")
+      .filter((row) => isDateInRange(row.date, dateFrom, dateTo));
+  }, [rows, dateFrom, dateTo]);
 
   const totals = useMemo(() => {
     const totalExpenses = rows.length;
@@ -218,32 +369,59 @@ export function EnterpriseExpensesManager() {
     };
   }, [rows]);
 
-  const columns = useMemo<Column<ExpenseRecord>[]>(
+  const generalColumns = useMemo<Column<ExpenseRecord>[]>(
     () => [
-      {
-        header: "نوع المصروف",
-        accessor: (row) => (row.type === "general" ? "مصروف عام" : "شراء بضاعة"),
-      },
-      {
-        header: "التفاصيل",
-        accessor: (row) =>
-          row.type === "general"
-            ? `${row.general?.expenseName ?? "-"} | الكمية: ${row.general?.expenseQuantity ?? 0}`
-            : `${row.purchase?.supplierName ?? "-"} | منتجات: ${row.purchase?.items.length ?? 0}`,
-      },
-      {
-        header: "المدينة/البلد",
-        accessor: (row) =>
-          row.type === "purchase"
-            ? `${row.purchase?.city ?? "-"} / ${countryOptions.find((country) => country.value === row.purchase?.country)?.label ?? row.purchase?.country ?? "-"}`
-            : "-",
-      },
+      { header: "اسم المصروف", accessor: (row) => row.general?.expenseName ?? "-" },
+      { header: "الكمية", accessor: (row) => row.general?.expenseQuantity ?? 0 },
+      { header: "النوع", accessor: (row) => generalExpensePeriodLabel[row.general?.period ?? "daily"] },
+      { header: "ملاحظات", accessor: (row) => row.general?.notes ?? "-" },
       { header: "التاريخ", accessor: "date" },
-      { header: "القيمة", accessor: (row) => row.totalAmount.toLocaleString() },
       {
         header: "الإجراءات",
         accessor: (row) => (
           <div className="flex items-center gap-1">
+            <button
+              onClick={() => openEditModal(row)}
+              className="rounded-md border border-slate-200 p-1.5 text-slate-700 hover:bg-slate-50"
+              title="تعديل"
+            >
+              <Pencil className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => handleDelete(row)}
+              className="rounded-md border border-red-200 p-1.5 text-red-700 hover:bg-red-50"
+              title="حذف"
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          </div>
+        ),
+      },
+    ],
+    []
+  );
+
+  const purchaseColumns = useMemo<Column<ExpenseRecord>[]>(
+    () => [
+      { header: "المورد", accessor: (row) => row.purchase?.supplierName ?? "-" },
+      { header: "المنتجات", accessor: (row) => row.purchase?.items.length ?? 0 },
+      { header: "طريقة الدفع", accessor: (row) => purchasePaymentMethodLabel[row.purchase?.paymentMethod ?? "bank_transfer"] },
+      { header: "مدفوع", accessor: (row) => (row.purchase?.paidAmount ?? 0).toLocaleString() },
+      { header: "متبقي", accessor: (row) => (row.purchase?.remainingAmount ?? 0).toLocaleString() },
+      { header: "الشحن", accessor: (row) => (row.purchase?.shippingCost ?? 0).toLocaleString() },
+      { header: "التاريخ", accessor: "date" },
+      { header: "الإجمالي", accessor: (row) => row.totalAmount.toLocaleString() },
+      {
+        header: "الإجراءات",
+        accessor: (row) => (
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setDetailsExpenseId(row.id)}
+              className="rounded-md border border-blue-200 p-1.5 text-blue-700 hover:bg-blue-50"
+              title="رؤية تفاصيل الفاتورة"
+            >
+              <Eye className="h-4 w-4" />
+            </button>
             <button
               onClick={() => openEditModal(row)}
               className="rounded-md border border-slate-200 p-1.5 text-slate-700 hover:bg-slate-50"
@@ -275,15 +453,17 @@ export function EnterpriseExpensesManager() {
   }
 
   /**
-   * Opens edit modal and maps selected row into form.
+   * Opens edit modal and maps selected row values.
    */
   function openEditModal(row: ExpenseRecord) {
     if (row.type === "general") {
+      setGeneralFilterVisible(true);
       setFormState({
         type: "general",
         date: row.date,
         expenseName: row.general?.expenseName ?? "",
         expenseQuantity: String(row.general?.expenseQuantity ?? ""),
+        generalPeriod: row.general?.period ?? "daily",
         generalNotes: row.general?.notes ?? "",
         supplierName: "",
         country: "SA",
@@ -291,13 +471,19 @@ export function EnterpriseExpensesManager() {
         discountAmount: "0",
         purchaseNotes: "",
         items: [],
+        paymentMethod: "bank_transfer",
+        paidAmount: "",
+        shippingCompanyId: "",
+        shippingCost: "",
       });
     } else {
+      setGeneralFilterVisible(false);
       setFormState({
         type: "purchase",
         date: row.date,
         expenseName: "",
         expenseQuantity: "",
+        generalPeriod: "daily",
         generalNotes: "",
         supplierName: row.purchase?.supplierName ?? "",
         country: row.purchase?.country ?? "SA",
@@ -305,6 +491,10 @@ export function EnterpriseExpensesManager() {
         discountAmount: String(row.purchase?.discountAmount ?? 0),
         purchaseNotes: row.purchase?.notes ?? "",
         items: row.purchase?.items ?? [],
+        paymentMethod: row.purchase?.paymentMethod ?? "bank_transfer",
+        paidAmount: String(row.purchase?.paidAmount ?? 0),
+        shippingCompanyId: row.purchase?.shippingCompanyId ?? "",
+        shippingCost: row.purchase?.shippingCost ? String(row.purchase.shippingCost) : "",
       });
     }
 
@@ -313,7 +503,7 @@ export function EnterpriseExpensesManager() {
   }
 
   /**
-   * Adds selected product to purchase list or increases quantity.
+   * Adds selected product to purchase list.
    */
   function addPurchaseProduct(product: CatalogProduct) {
     setFormState((prev) => {
@@ -366,7 +556,7 @@ export function EnterpriseExpensesManager() {
   }
 
   /**
-   * Validates and saves expense row.
+   * Validates and saves one expense row.
    */
   function handleSave() {
     const date = formState.date || new Date().toISOString().slice(0, 10);
@@ -391,6 +581,7 @@ export function EnterpriseExpensesManager() {
         general: {
           expenseName: formState.expenseName.trim(),
           expenseQuantity: quantity,
+          period: formState.generalPeriod,
           notes: formState.generalNotes.trim(),
         },
         purchase: null,
@@ -419,11 +610,27 @@ export function EnterpriseExpensesManager() {
         return;
       }
 
+      const paidAmount =
+        formState.paymentMethod === "other"
+          ? Math.max(0, Number(formState.paidAmount || 0))
+          : formState.paymentMethod === "bank_transfer"
+            ? purchaseTotal
+            : 0;
+
+      const remainingAmount =
+        formState.paymentMethod === "other"
+          ? remainingAmountAuto
+          : formState.paymentMethod === "cod"
+            ? purchaseTotal
+            : 0;
+
+      const shippingCompany = shippingCompanies.find((item) => item.id === formState.shippingCompanyId) ?? null;
+
       const payload: ExpenseRecord = {
         id: editingId ?? `exp_${Date.now()}`,
         type: "purchase",
         date,
-        totalAmount: purchaseTotal,
+        totalAmount: purchaseTotal + shippingCostResolved,
         general: null,
         purchase: {
           supplierName: formState.supplierName.trim(),
@@ -432,6 +639,12 @@ export function EnterpriseExpensesManager() {
           discountAmount: purchaseDiscount,
           notes: formState.purchaseNotes.trim(),
           items: formState.items,
+          paymentMethod: formState.paymentMethod,
+          paidAmount,
+          remainingAmount,
+          shippingCompanyId: shippingCompany?.id ?? null,
+          shippingCompanyName: shippingCompany?.company ?? "",
+          shippingCost: shippingCostResolved,
         },
       };
 
@@ -447,10 +660,11 @@ export function EnterpriseExpensesManager() {
     setIsModalOpen(false);
     setEditingId(null);
     setFormState(initialFormState);
+    setGeneralFilterVisible(true);
   }
 
   /**
-   * Deletes expense row after confirmation.
+   * Deletes one expense row.
    */
   function handleDelete(row: ExpenseRecord) {
     const confirmed = window.confirm("هل تريد حذف هذا المصروف؟");
@@ -467,7 +681,7 @@ export function EnterpriseExpensesManager() {
       <SectionHeader
         align="right"
         title="إدارة المصاريف"
-        description="اختيار نوع المصروف: مصروف عام أو شراء بضاعة بنظام POS."
+        description="جدول منفصل للمصاريف العامة وجدول منفصل لمصاريف شراء البضاعة."
       >
         <Button leftIcon={<Plus className="h-4 w-4" />} onClick={openCreateModal}>
           إضافة مصروف
@@ -489,29 +703,78 @@ export function EnterpriseExpensesManager() {
         </DynamicCard>
         <DynamicCard className="border-l-4 border-l-emerald-500">
           <DynamicCard.Content className="py-4">
-            <p className="text-sm text-slate-600">إجمالي قيمة المشتريات</p>
+            <p className="text-sm text-slate-600">إجمالي القيمة</p>
             <p className="text-3xl font-bold text-emerald-700">{totals.totalValue.toLocaleString()}</p>
           </DynamicCard.Content>
         </DynamicCard>
       </div>
 
       <DynamicCard>
-        <DynamicCard.Header title="قائمة المصاريف" description="إدارة المصروفات العامة ومصاريف شراء البضاعة." />
+        <DynamicCard.Header title="فلترة المصاريف" description="فلترة حسب التاريخ، ونوع المصروف الدوري للمصاريف العامة." />
+        <DynamicCard.Content className="pt-4">
+          <div className="grid grid-cols-1 gap-3 rounded-lg border border-slate-200 p-3 md:grid-cols-3">
+            <input
+              type="date"
+              className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
+              value={dateFrom}
+              onChange={(event) => setDateFrom(event.target.value)}
+            />
+            <input
+              type="date"
+              className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
+              value={dateTo}
+              onChange={(event) => setDateTo(event.target.value)}
+            />
+            {generalFilterVisible ? (
+              <select
+                className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
+                value={generalPeriodFilter}
+                onChange={(event) => setGeneralPeriodFilter(event.target.value as "all" | GeneralExpensePeriod)}
+              >
+                <option value="all">كل الأنواع الدورية</option>
+                <option value="daily">يومي</option>
+                <option value="monthly">شهري</option>
+                <option value="yearly">سنوي</option>
+              </select>
+            ) : (
+              <div className="flex h-10 items-center rounded-lg border border-dashed border-slate-300 px-3 text-xs text-slate-500">
+                فلترة النوع الدوري تظهر فقط عند المصاريف العامة
+              </div>
+            )}
+          </div>
+        </DynamicCard.Content>
+      </DynamicCard>
+
+      <DynamicCard>
+        <DynamicCard.Header title="جدول المصاريف العامة" description="عرض مصاريف النوع العام فقط." />
         <DynamicCard.Content className="pt-4">
           <DataTable
-            columns={columns}
-            data={rows}
+            columns={generalColumns}
+            data={filteredGeneralRows}
             dir="rtl"
             pageSize={8}
-            totalCount={rows.length}
-            currentPage={page}
-            onPageChange={setPage}
-            title="المصاريف"
-            getRowSearchText={(row) =>
-              row.type === "general"
-                ? `${row.general?.expenseName ?? ""} ${row.general?.notes ?? ""} ${row.date}`
-                : `${row.purchase?.supplierName ?? ""} ${row.purchase?.city ?? ""} ${row.purchase?.notes ?? ""} ${row.purchase?.items.map((item) => item.name).join(" ")}`
-            }
+            totalCount={filteredGeneralRows.length}
+            currentPage={pageGeneral}
+            onPageChange={setPageGeneral}
+            title="المصاريف العامة"
+            getRowSearchText={(row) => `${row.general?.expenseName ?? ""} ${row.general?.notes ?? ""} ${row.date}`}
+          />
+        </DynamicCard.Content>
+      </DynamicCard>
+
+      <DynamicCard>
+        <DynamicCard.Header title="جدول شراء البضاعة" description="عرض مصاريف شراء المنتجات فقط." />
+        <DynamicCard.Content className="pt-4">
+          <DataTable
+            columns={purchaseColumns}
+            data={filteredPurchaseRows}
+            dir="rtl"
+            pageSize={8}
+            totalCount={filteredPurchaseRows.length}
+            currentPage={pagePurchase}
+            onPageChange={setPagePurchase}
+            title="شراء البضاعة"
+            getRowSearchText={(row) => `${row.purchase?.supplierName ?? ""} ${row.purchase?.city ?? ""} ${row.purchase?.notes ?? ""} ${row.date}`}
           />
         </DynamicCard.Content>
       </DynamicCard>
@@ -533,7 +796,11 @@ export function EnterpriseExpensesManager() {
             <select
               className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
               value={formState.type}
-              onChange={(event) => setFormState((prev) => ({ ...prev, type: event.target.value as ExpenseType }))}
+              onChange={(event) => {
+                const nextType = event.target.value as ExpenseType;
+                setFormState((prev) => ({ ...prev, type: nextType }));
+                setGeneralFilterVisible(nextType === "general");
+              }}
             >
               <option value="general">مصروف عام</option>
               <option value="purchase">شراء بضاعة</option>
@@ -562,6 +829,15 @@ export function EnterpriseExpensesManager() {
                 value={formState.expenseQuantity}
                 onChange={(event) => setFormState((prev) => ({ ...prev, expenseQuantity: event.target.value }))}
               />
+              <select
+                className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
+                value={formState.generalPeriod}
+                onChange={(event) => setFormState((prev) => ({ ...prev, generalPeriod: event.target.value as GeneralExpensePeriod }))}
+              >
+                <option value="daily">يومي</option>
+                <option value="monthly">شهري</option>
+                <option value="yearly">سنوي</option>
+              </select>
               <textarea
                 className="min-h-[100px] rounded-lg border border-slate-200 px-3 py-2 text-sm md:col-span-2"
                 placeholder="ملاحظات"
@@ -571,7 +847,121 @@ export function EnterpriseExpensesManager() {
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-                            <div className="space-y-3 rounded-lg border border-slate-200 p-3">
+              <div className="space-y-3 rounded-lg border border-slate-200 p-3">
+                <p className="text-sm font-semibold text-slate-800">بيانات شراء البضاعة</p>
+                <input
+                  className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm"
+                  placeholder="اسم المورد"
+                  value={formState.supplierName}
+                  onChange={(event) => setFormState((prev) => ({ ...prev, supplierName: event.target.value }))}
+                />
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                  <select
+                    className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
+                    value={formState.country}
+                    onChange={(event) => setFormState((prev) => ({ ...prev, country: event.target.value }))}
+                  >
+                    {countryOptions.map((country) => (
+                      <option key={country.value} value={country.value}>
+                        {country.label}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
+                    placeholder="المدينة"
+                    value={formState.city}
+                    onChange={(event) => setFormState((prev) => ({ ...prev, city: event.target.value }))}
+                  />
+                </div>
+
+                <select
+                  className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm"
+                  value={formState.paymentMethod}
+                  onChange={(event) => setFormState((prev) => ({ ...prev, paymentMethod: event.target.value as PurchasePaymentMethod }))}
+                >
+                  <option value="bank_transfer">بنكي</option>
+                  <option value="cod">عند الاستلام</option>
+                  <option value="other">طرق أخرى</option>
+                </select>
+
+                {formState.paymentMethod === "other" ? (
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                    <input
+                      type="number"
+                      min={0}
+                      className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
+                      placeholder="المبلغ المدفوع"
+                      value={formState.paidAmount}
+                      onChange={(event) => setFormState((prev) => ({ ...prev, paidAmount: event.target.value }))}
+                    />
+                    <input
+                      type="number"
+                      className="h-10 rounded-lg border border-slate-200 bg-slate-100 px-3 text-sm"
+                      value={remainingAmountAuto}
+                      readOnly
+                    />
+                  </div>
+                ) : null}
+
+                <select
+                  className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm"
+                  value={formState.shippingCompanyId}
+                  onChange={(event) => setFormState((prev) => ({ ...prev, shippingCompanyId: event.target.value }))}
+                >
+                  <option value="">شركة الشحن (اختياري)</option>
+                  {shippingCompanies.map((company) => (
+                    <option key={company.id} value={company.id}>
+                      {company.company}
+                    </option>
+                  ))}
+                </select>
+
+                <input
+                  type="number"
+                  min={0}
+                  className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm"
+                  placeholder="مصروف الشحن (اختياري - 0 افتراضي)"
+                  value={formState.shippingCost}
+                  onChange={(event) => setFormState((prev) => ({ ...prev, shippingCost: event.target.value }))}
+                />
+
+                <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
+                  <div className="flex items-center justify-between text-sm">
+                    <span>المجموع الفرعي</span>
+                    <span>{purchaseSubtotal.toLocaleString()}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <span>الخصم</span>
+                    <input
+                      type="number"
+                      min={0}
+                      className="h-8 w-28 rounded-lg border border-slate-200 px-2 text-sm"
+                      value={formState.discountAmount}
+                      onChange={(event) => setFormState((prev) => ({ ...prev, discountAmount: event.target.value }))}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <span>الشحن</span>
+                    <span>{shippingCostResolved.toLocaleString()}</span>
+                  </div>
+                  <div className="border-t border-slate-200 pt-2 text-base font-bold">
+                    <div className="flex items-center justify-between">
+                      <span>إجمالي الفاتورة</span>
+                      <span>{(purchaseTotal + shippingCostResolved).toLocaleString()}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <textarea
+                  className="min-h-[90px] w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                  placeholder="ملاحظات عامة"
+                  value={formState.purchaseNotes}
+                  onChange={(event) => setFormState((prev) => ({ ...prev, purchaseNotes: event.target.value }))}
+                />
+              </div>
+
+              <div className="space-y-3 rounded-lg border border-slate-200 p-3">
                 <p className="text-sm font-semibold text-slate-800">اختيار المنتجات المشتراة (POS)</p>
                 <div className="max-h-56 space-y-2 overflow-y-auto">
                   {catalogProducts.map((product) => (
@@ -627,68 +1017,67 @@ export function EnterpriseExpensesManager() {
                   </div>
                 )}
               </div>
-              
-              <div className="space-y-3 rounded-lg border border-slate-200 p-3">
-                <p className="text-sm font-semibold text-slate-800">بيانات شراء البضاعة</p>
-                <input
-                  className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm"
-                  placeholder="اسم المورد"
-                  value={formState.supplierName}
-                  onChange={(event) => setFormState((prev) => ({ ...prev, supplierName: event.target.value }))}
-                />
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                  <select
-                    className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
-                    value={formState.country}
-                    onChange={(event) => setFormState((prev) => ({ ...prev, country: event.target.value }))}
-                  >
-                    {countryOptions.map((country) => (
-                      <option key={country.value} value={country.value}>
-                        {country.label}
-                      </option>
-                    ))}
-                  </select>
-                  <input
-                    className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
-                    placeholder="المدينة"
-                    value={formState.city}
-                    onChange={(event) => setFormState((prev) => ({ ...prev, city: event.target.value }))}
-                  />
-                </div>
-
-                <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
-                  <div className="flex items-center justify-between text-sm">
-                    <span>المجموع الفرعي</span>
-                    <span>{purchaseSubtotal.toLocaleString()}</span>
-                  </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span>الخصم</span>
-                    <input
-                      type="number"
-                      min={0}
-                      className="h-8 w-28 rounded-lg border border-slate-200 px-2 text-sm"
-                      value={formState.discountAmount}
-                      onChange={(event) => setFormState((prev) => ({ ...prev, discountAmount: event.target.value }))}
-                    />
-                  </div>
-                  <div className="border-t border-slate-200 pt-2 text-base font-bold">
-                    <div className="flex items-center justify-between">
-                      <span>الإجمالي بعد الخصم</span>
-                      <span>{purchaseTotal.toLocaleString()}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <textarea
-                  className="min-h-[90px] w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                  placeholder="ملاحظات عامة"
-                  value={formState.purchaseNotes}
-                  onChange={(event) => setFormState((prev) => ({ ...prev, purchaseNotes: event.target.value }))}
-                />
-              </div>
             </div>
           )}
         </div>
+      </AppModal>
+
+      <AppModal
+        isOpen={detailsExpense !== null}
+        onClose={() => setDetailsExpenseId(null)}
+        title={detailsExpense ? `تفاصيل فاتورة شراء البضاعة - ${detailsExpense.id}` : "تفاصيل فاتورة الشراء"}
+        size="xl"
+        footer={<Button variant="outline" onClick={() => setDetailsExpenseId(null)}>إغلاق</Button>}
+      >
+        {detailsExpense?.purchase ? (
+          <div className="space-y-4">
+            <div className="grid gap-3 rounded-lg border border-slate-200 p-4 md:grid-cols-2">
+              <p>اسم المورد: <span className="font-semibold">{detailsExpense.purchase.supplierName}</span></p>
+              <p>طريقة الدفع: <span className="font-semibold">{purchasePaymentMethodLabel[detailsExpense.purchase.paymentMethod]}</span></p>
+              <p>المدينة: <span className="font-semibold">{detailsExpense.purchase.city}</span></p>
+              <p>البلد: <span className="font-semibold">{countryOptions.find((country) => country.value === detailsExpense.purchase?.country)?.label ?? detailsExpense.purchase.country}</span></p>
+              <p>المبلغ المدفوع: <span className="font-semibold">{detailsExpense.purchase.paidAmount.toLocaleString()}</span></p>
+              <p>المبلغ المتبقي: <span className="font-semibold">{detailsExpense.purchase.remainingAmount.toLocaleString()}</span></p>
+              <p>شركة الشحن: <span className="font-semibold">{detailsExpense.purchase.shippingCompanyName || "غير محددة"}</span></p>
+              <p>مصروف الشحن: <span className="font-semibold">{detailsExpense.purchase.shippingCost.toLocaleString()}</span></p>
+              <p>الخصم: <span className="font-semibold">{detailsExpense.purchase.discountAmount.toLocaleString()}</span></p>
+              <p>إجمالي الفاتورة: <span className="font-semibold text-emerald-700">{detailsExpense.totalAmount.toLocaleString()}</span></p>
+            </div>
+
+            <div className="rounded-lg border border-slate-200 p-4">
+              <p className="mb-2 text-sm font-semibold text-slate-800">ملاحظات عامة</p>
+              <p className="text-sm text-slate-600">{detailsExpense.purchase.notes || "لا توجد ملاحظات"}</p>
+            </div>
+
+            <div className="rounded-lg border border-slate-200 p-4">
+              <p className="mb-2 text-sm font-semibold text-slate-800">المنتجات المشتراة</p>
+              <div className="overflow-x-auto rounded-xl border border-slate-200">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-slate-50">
+                    <tr>
+                      <th className="p-3 text-right font-semibold text-slate-700">المنتج</th>
+                      <th className="p-3 text-right font-semibold text-slate-700">SKU</th>
+                      <th className="p-3 text-right font-semibold text-slate-700">الكمية</th>
+                      <th className="p-3 text-right font-semibold text-slate-700">السعر</th>
+                      <th className="p-3 text-right font-semibold text-slate-700">الإجمالي</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {detailsExpense.purchase.items.map((item) => (
+                      <tr key={item.id} className="border-t border-slate-100">
+                        <td className="p-3">{item.name}</td>
+                        <td className="p-3">{item.sku}</td>
+                        <td className="p-3">{item.quantity}</td>
+                        <td className="p-3">{item.price.toLocaleString()}</td>
+                        <td className="p-3 font-semibold">{(item.price * item.quantity).toLocaleString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        ) : null}
       </AppModal>
     </section>
   );
