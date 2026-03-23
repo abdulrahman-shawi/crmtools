@@ -252,6 +252,139 @@ function isDateInRange(targetDate: string, fromDate: string, toDate: string): bo
 }
 
 /**
+ * Normalizes legacy and partial expense rows from localStorage to safe shape.
+ */
+function normalizeStoredExpenses(input: unknown[]): ExpenseRecord[] {
+  const toNumber = (value: unknown, fallback = 0): number => {
+    const num = Number(value);
+    return Number.isFinite(num) ? num : fallback;
+  };
+
+  const mapPaymentMethod = (value: unknown): PurchasePaymentMethod => {
+    if (value === "bank_transfer" || value === "cod" || value === "other") {
+      return value;
+    }
+
+    if (value === "transfer") {
+      return "bank_transfer";
+    }
+
+    if (value === "cash") {
+      return "cod";
+    }
+
+    if (value === "card") {
+      return "other";
+    }
+
+    return "bank_transfer";
+  };
+
+  return input
+    .map((raw, index) => {
+      if (!raw || typeof raw !== "object") {
+        return null;
+      }
+
+      const row = raw as Record<string, unknown>;
+      const rowType: ExpenseType =
+        row.type === "general" || row.type === "purchase"
+          ? row.type
+          : row.purchase
+            ? "purchase"
+            : "general";
+
+      const rowDate = typeof row.date === "string" && row.date ? row.date : new Date().toISOString().slice(0, 10);
+      const rowId = typeof row.id === "string" && row.id ? row.id : `exp_legacy_${Date.now()}_${index}`;
+
+      const generalRaw = row.general && typeof row.general === "object" ? (row.general as Record<string, unknown>) : null;
+      const purchaseRaw = row.purchase && typeof row.purchase === "object" ? (row.purchase as Record<string, unknown>) : null;
+
+      let mappedGeneral: GeneralExpenseDetails | null = null;
+      if (rowType === "general") {
+        const periodValue = generalRaw?.period;
+        const period: GeneralExpensePeriod =
+          periodValue === "daily" || periodValue === "monthly" || periodValue === "yearly" ? periodValue : "daily";
+
+        mappedGeneral = {
+          expenseName: typeof generalRaw?.expenseName === "string" ? generalRaw.expenseName : "مصروف عام",
+          expenseQuantity: Math.max(1, toNumber(generalRaw?.expenseQuantity, 1)),
+          period,
+          notes: typeof generalRaw?.notes === "string" ? generalRaw.notes : "",
+        };
+      }
+
+      let mappedPurchase: PurchaseExpenseDetails | null = null;
+      if (rowType === "purchase") {
+        const itemsRaw =
+          Array.isArray(purchaseRaw?.items)
+            ? purchaseRaw.items
+            : Array.isArray(row.items)
+              ? row.items
+              : [];
+
+        const items = itemsRaw
+          .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object")
+          .map((item, itemIndex) => ({
+            id: typeof item.id === "string" && item.id ? item.id : `line_legacy_${rowId}_${itemIndex}`,
+            productId: typeof item.productId === "string" && item.productId ? item.productId : `legacy_${itemIndex}`,
+            name: typeof item.name === "string" ? item.name : "منتج",
+            sku: typeof item.sku === "string" ? item.sku : `LEG-${itemIndex + 1}`,
+            price: Math.max(0, toNumber(item.price, 0)),
+            quantity: Math.max(1, toNumber(item.quantity, 1)),
+          }));
+
+        const paymentMethod = mapPaymentMethod(purchaseRaw?.paymentMethod);
+        const subTotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+        const discountAmount = Math.max(0, toNumber(purchaseRaw?.discountAmount, 0));
+        const purchaseTotal = Math.max(0, subTotal - discountAmount);
+        const paidAmount = Math.max(0, toNumber(purchaseRaw?.paidAmount, paymentMethod === "bank_transfer" ? purchaseTotal : 0));
+        const remainingAmount =
+          purchaseRaw?.remainingAmount !== undefined
+            ? Math.max(0, toNumber(purchaseRaw.remainingAmount, 0))
+            : paymentMethod === "other"
+              ? Math.max(0, purchaseTotal - paidAmount)
+              : paymentMethod === "cod"
+                ? purchaseTotal
+                : 0;
+
+        mappedPurchase = {
+          supplierName: typeof purchaseRaw?.supplierName === "string" ? purchaseRaw.supplierName : "",
+          country: typeof purchaseRaw?.country === "string" ? purchaseRaw.country : "SA",
+          city: typeof purchaseRaw?.city === "string" ? purchaseRaw.city : "",
+          discountAmount,
+          notes: typeof purchaseRaw?.notes === "string" ? purchaseRaw.notes : "",
+          items,
+          paymentMethod,
+          paidAmount,
+          remainingAmount,
+          shippingCompanyId:
+            typeof purchaseRaw?.shippingCompanyId === "string" && purchaseRaw.shippingCompanyId
+              ? purchaseRaw.shippingCompanyId
+              : null,
+          shippingCompanyName: typeof purchaseRaw?.shippingCompanyName === "string" ? purchaseRaw.shippingCompanyName : "",
+          shippingCost: Math.max(0, toNumber(purchaseRaw?.shippingCost, 0)),
+        };
+      }
+
+      const fallbackTotal = mappedPurchase
+        ? Math.max(0, mappedPurchase.items.reduce((sum, item) => sum + item.price * item.quantity, 0) - mappedPurchase.discountAmount) +
+          mappedPurchase.shippingCost
+        : 0;
+
+      return {
+        id: rowId,
+        type: rowType,
+        date: rowDate,
+        totalAmount: Math.max(0, toNumber(row.totalAmount, fallbackTotal)),
+        general: mappedGeneral,
+        purchase: mappedPurchase,
+      } satisfies ExpenseRecord;
+    })
+    .filter((row): row is ExpenseRecord => row !== null);
+}
+
+/**
  * Expense manager with separate general/purchase tables and filters.
  */
 export function EnterpriseExpensesManager() {
@@ -317,9 +450,9 @@ export function EnterpriseExpensesManager() {
   }, [formState.shippingCost, selectedShippingCompany]);
 
   useEffect(() => {
-    const storedExpenses = readStorageArray<ExpenseRecord>(EXPENSES_STORAGE_KEY);
+    const storedExpenses = readStorageArray<unknown>(EXPENSES_STORAGE_KEY);
     if (storedExpenses.length > 0) {
-      setRows(storedExpenses);
+      setRows(normalizeStoredExpenses(storedExpenses));
     }
 
     const catalogRows = readStorageArray<ProductCatalogStorageRow>(CATALOG_STORAGE_KEY);
@@ -404,7 +537,7 @@ export function EnterpriseExpensesManager() {
   const purchaseColumns = useMemo<Column<ExpenseRecord>[]>(
     () => [
       { header: "المورد", accessor: (row) => row.purchase?.supplierName ?? "-" },
-      { header: "المنتجات", accessor: (row) => row.purchase?.items.length ?? 0 },
+      { header: "المنتجات", accessor: (row) => row.purchase?.items?.length ?? 0 },
       { header: "طريقة الدفع", accessor: (row) => purchasePaymentMethodLabel[row.purchase?.paymentMethod ?? "bank_transfer"] },
       { header: "مدفوع", accessor: (row) => (row.purchase?.paidAmount ?? 0).toLocaleString() },
       { header: "متبقي", accessor: (row) => (row.purchase?.remainingAmount ?? 0).toLocaleString() },
@@ -1063,7 +1196,7 @@ export function EnterpriseExpensesManager() {
                     </tr>
                   </thead>
                   <tbody>
-                    {detailsExpense.purchase.items.map((item) => (
+                    {(detailsExpense.purchase.items ?? []).map((item) => (
                       <tr key={item.id} className="border-t border-slate-100">
                         <td className="p-3">{item.name}</td>
                         <td className="p-3">{item.sku}</td>
