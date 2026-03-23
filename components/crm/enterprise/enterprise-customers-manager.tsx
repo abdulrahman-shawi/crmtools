@@ -4,6 +4,9 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { MessageSquareText, Pencil, Plus, ReceiptText, Search, Share2, Trash2 } from "lucide-react";
 import toast from "react-hot-toast";
+import PhoneInput from "react-phone-number-input/input";
+import { getCountryCallingCode } from "react-phone-number-input";
+import type { CountryCode } from "libphonenumber-js/core";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { AppModal } from "@/components/ui/app-modal";
 import { Button } from "@/components/ui/button";
@@ -16,6 +19,8 @@ interface EnterpriseCustomer {
   companySize: "medium" | "large";
   industry: string;
   contactPersons: string[];
+  country: CountryCode;
+  city: string;
   phone: string;
   email: string;
   status: "lead" | "active" | "at-risk";
@@ -40,6 +45,8 @@ interface CustomerFormState {
   companySize: EnterpriseCustomer["companySize"];
   industry: string;
   contactPersons: string[];
+  country: CountryCode;
+  city: string;
   phone: string;
   email: string;
   status: EnterpriseCustomer["status"];
@@ -151,6 +158,8 @@ const initialFormState: CustomerFormState = {
   companySize: "medium",
   industry: "",
   contactPersons: [],
+  country: "SA",
+  city: "",
   phone: "",
   email: "",
   status: "lead",
@@ -175,6 +184,17 @@ const contactOwnerOptions = [
   "ليلى عمر",
   "محمد العتيبي",
   "سارة الحمد",
+];
+
+const countryOptions: Array<{ code: CountryCode; label: string }> = [
+  { code: "SA", label: "السعودية" },
+  { code: "AE", label: "الإمارات" },
+  { code: "KW", label: "الكويت" },
+  { code: "QA", label: "قطر" },
+  { code: "BH", label: "البحرين" },
+  { code: "OM", label: "عُمان" },
+  { code: "EG", label: "مصر" },
+  { code: "JO", label: "الأردن" },
 ];
 
 /**
@@ -273,7 +293,9 @@ const initialCustomers: EnterpriseCustomer[] = [
     companySize: "large",
     industry: "تقنية معلومات",
     contactPersons: ["أحمد الزهراني"],
-    phone: "0501234567",
+    country: "SA",
+    city: "الرياض",
+    phone: "+966501234567",
     email: "a.alzahrani@nukhba.sa",
     status: "active",
     tier: "gold",
@@ -288,7 +310,9 @@ const initialCustomers: EnterpriseCustomer[] = [
     companySize: "medium",
     industry: "خدمات أعمال",
     contactPersons: ["ريم القحطاني"],
-    phone: "0559876543",
+    country: "SA",
+    city: "جدة",
+    phone: "+966559876543",
     email: "reem@rowad.sa",
     status: "lead",
     tier: "silver",
@@ -303,7 +327,9 @@ const initialCustomers: EnterpriseCustomer[] = [
     companySize: "large",
     industry: "لوجستيات",
     contactPersons: ["ليلى عمر"],
-    phone: "0532468101",
+    country: "SA",
+    city: "الدمام",
+    phone: "+966532468101",
     email: "l.omar@majdlog.com",
     status: "at-risk",
     tier: "bronze",
@@ -575,7 +601,12 @@ export function EnterpriseCustomersManager() {
         header: "مسؤول التواصل",
         accessor: (row) => row.contactPersons.join("، "),
       },
-      { header: "الجوال", accessor: "phone" },
+      {
+        header: "البلد",
+        accessor: (row) => countryOptions.find((country) => country.code === row.country)?.label ?? row.country,
+      },
+      { header: "المدينة", accessor: "city" },
+      { header: "رقم التواصل", accessor: "phone" },
       {
         header: "الحالة",
         accessor: (row) => {
@@ -650,6 +681,8 @@ export function EnterpriseCustomersManager() {
       companySize: customer.companySize,
       industry: customer.industry,
       contactPersons: customer.contactPersons,
+      country: customer.country,
+      city: customer.city,
       phone: customer.phone,
       email: customer.email,
       status: customer.status,
@@ -675,6 +708,21 @@ export function EnterpriseCustomersManager() {
       lastContactSummary: customer.lastCommunication,
     });
     setIsCommunicationModalOpen(true);
+  }
+
+  /**
+   * Toggles selected contact owner in customer form.
+   */
+  function toggleContactOwner(owner: string) {
+    setFormState((prev) => {
+      const exists = prev.contactPersons.includes(owner);
+      return {
+        ...prev,
+        contactPersons: exists
+          ? prev.contactPersons.filter((item) => item !== owner)
+          : [...prev.contactPersons, owner],
+      };
+    });
   }
 
   /**
@@ -863,7 +911,13 @@ export function EnterpriseCustomersManager() {
    * يحفظ العميل الجديد أو تحديث العميل الحالي.
    */
   function handleSave() {
-    if (!formState.companyName.trim() || formState.contactPersons.length === 0 || !formState.phone.trim()) {
+    if (
+      !formState.companyName.trim() ||
+      formState.contactPersons.length === 0 ||
+      !formState.country ||
+      !formState.city.trim() ||
+      !formState.phone.trim()
+    ) {
       toast.error("يرجى تعبئة الحقول الأساسية");
       return;
     }
@@ -879,6 +933,8 @@ export function EnterpriseCustomersManager() {
       companySize: formState.companySize,
       industry: formState.industry.trim(),
       contactPersons: formState.contactPersons,
+      country: formState.country,
+      city: formState.city.trim(),
       phone: formState.phone.trim(),
       email: formState.email.trim(),
       status: formState.status,
@@ -1031,7 +1087,7 @@ export function EnterpriseCustomersManager() {
                 .map((order) => `${order.orderNo} ${order.total} ${order.date}`)
                 .join(" ");
 
-              return `${customer.companyName} ${sizeLabel[customer.companySize]} ${customer.industry} ${customer.contactPersons.join(" ")} ${statusLabel[customer.status].label} ${tierLabel[customer.tier].label} ${customer.lastCommunication} ${customer.notes} ${communicationText} ${invoiceText} ${orderText}`;
+              return `${customer.companyName} ${sizeLabel[customer.companySize]} ${customer.industry} ${customer.contactPersons.join(" ")} ${customer.city} ${customer.country} ${customer.phone} ${statusLabel[customer.status].label} ${tierLabel[customer.tier].label} ${customer.lastCommunication} ${customer.notes} ${communicationText} ${invoiceText} ${orderText}`;
             }}
           />
         </DynamicCard.Content>
@@ -1074,30 +1130,52 @@ export function EnterpriseCustomersManager() {
             value={formState.industry}
             onChange={(event) => setFormState((prev) => ({ ...prev, industry: event.target.value }))}
           />
-          <div className="space-y-1 md:col-span-2">
-            <p className="text-xs text-slate-600">مسؤول التواصل (يمكن اختيار أكثر من مسؤول)</p>
-            <select
-              multiple
-              className="min-h-[96px] w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-              value={formState.contactPersons}
-              onChange={(event) => {
-                const selectedValues = Array.from(event.target.selectedOptions, (option) => option.value);
-                setFormState((prev) => ({ ...prev, contactPersons: selectedValues }));
-              }}
-            >
+          <div className="space-y-2 rounded-lg border border-slate-200 p-3 md:col-span-2">
+            <p className="text-xs text-slate-600">مسؤول التواصل (Checkbox - يمكن اختيار أكثر من مسؤول)</p>
+            <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
               {contactOwnerOptions.map((owner) => (
-                <option key={owner} value={owner}>
-                  {owner}
-                </option>
+                <label key={owner} className="flex items-center gap-2 text-sm text-slate-700">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 rounded border-slate-300"
+                    checked={formState.contactPersons.includes(owner)}
+                    onChange={() => toggleContactOwner(owner)}
+                  />
+                  <span>{owner}</span>
+                </label>
               ))}
-            </select>
+            </div>
           </div>
+          <select
+            className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
+            value={formState.country}
+            onChange={(event) => setFormState((prev) => ({ ...prev, country: event.target.value as CountryCode }))}
+          >
+            {countryOptions.map((country) => (
+              <option key={country.code} value={country.code}>
+                {country.label}
+              </option>
+            ))}
+          </select>
           <input
             className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
-            placeholder="رقم الجوال"
-            value={formState.phone}
-            onChange={(event) => setFormState((prev) => ({ ...prev, phone: event.target.value }))}
+            placeholder="المدينة"
+            value={formState.city}
+            onChange={(event) => setFormState((prev) => ({ ...prev, city: event.target.value }))}
           />
+          <div className="md:col-span-2">
+            <p className="mb-1 text-xs text-slate-600">رقم التواصل (مع رمز الدولة)</p>
+            <div className="flex h-10 items-center gap-2 rounded-lg border border-slate-200 px-3 text-sm">
+              <span className="text-slate-500">+{getCountryCallingCode(formState.country)}</span>
+              <PhoneInput
+                country={formState.country}
+                value={formState.phone}
+                onChange={(value) => setFormState((prev) => ({ ...prev, phone: value ?? "" }))}
+                international
+                className="w-full bg-transparent outline-none"
+              />
+            </div>
+          </div>
           <input
             type="email"
             className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
