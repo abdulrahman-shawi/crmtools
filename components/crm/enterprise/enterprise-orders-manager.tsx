@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Eye, MessageCircle, Pencil, Share2, Trash2, Truck } from "lucide-react";
+import { Eye, MessageCircle, Pencil, Search, Share2, Trash2, Truck } from "lucide-react";
 import toast from "react-hot-toast";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { AppModal } from "@/components/ui/app-modal";
@@ -70,17 +70,6 @@ interface ShippingCompany {
   avgCost: number;
 }
 
-interface EditOrderFormState {
-  receiverName: string;
-  receiverPhone: string;
-  receiverCity: string;
-  deliveryNotes: string;
-  status: SalesOrder["status"];
-  receivedAmount: string;
-  shippingCompanyId: string;
-  shippingCost: string;
-}
-
 const SALES_INVOICES_STORAGE_KEY = "crm-enterprise-sales-invoices";
 const SALES_ORDERS_STORAGE_KEY = "crm-enterprise-sales-orders";
 const SHIPPING_COMPANIES_STORAGE_KEY = "crm-enterprise-shipping-companies";
@@ -101,6 +90,14 @@ const defaultShippingCompanies: ShippingCompany[] = [
   { id: "sh_1", company: "FastShip", avgCost: 22 },
   { id: "sh_2", company: "CargoLink", avgCost: 12 },
   { id: "sh_3", company: "BlueLogix", avgCost: 9 },
+];
+
+const posProducts: PosLineItem[] = [
+  { id: "pos_pr_1", productId: "pos_pr_1", name: "CRM Pro License", sku: "CRM-PRO", price: 1999, quantity: 1 },
+  { id: "pos_pr_2", productId: "pos_pr_2", name: "Analytics Plus", sku: "ANL-PLUS", price: 799, quantity: 1 },
+  { id: "pos_pr_3", productId: "pos_pr_3", name: "Priority Support", sku: "SUP-PRIO", price: 1200, quantity: 1 },
+  { id: "pos_pr_4", productId: "pos_pr_4", name: "Onboarding Pack", sku: "ONB-PACK", price: 650, quantity: 1 },
+  { id: "pos_pr_5", productId: "pos_pr_5", name: "WhatsApp Integration", sku: "WA-INT", price: 420, quantity: 1 },
 ];
 
 /**
@@ -137,16 +134,17 @@ export function EnterpriseOrdersManager() {
   const [editingOrderId, setEditingOrderId] = useState<string | null>(null);
   const [selectedShippingCompanyId, setSelectedShippingCompanyId] = useState("");
   const [shippingAmountInput, setShippingAmountInput] = useState("");
-  const [editForm, setEditForm] = useState<EditOrderFormState>({
-    receiverName: "",
-    receiverPhone: "",
-    receiverCity: "",
-    deliveryNotes: "",
-    status: "new",
-    receivedAmount: "0",
-    shippingCompanyId: "",
-    shippingCost: "",
-  });
+  const [editProductSearch, setEditProductSearch] = useState("");
+  const [editItems, setEditItems] = useState<PosLineItem[]>([]);
+  const [editDiscountAmount, setEditDiscountAmount] = useState("0");
+  const [editTaxRate, setEditTaxRate] = useState("15");
+  const [editPaymentMethod, setEditPaymentMethod] = useState<SalesInvoice["paymentMethod"]>("bank_transfer");
+  const [editPaymentStatus, setEditPaymentStatus] = useState<SalesInvoice["paymentStatus"]>("unpaid");
+  const [editReceiverName, setEditReceiverName] = useState("");
+  const [editReceiverPhone, setEditReceiverPhone] = useState("");
+  const [editReceiverCity, setEditReceiverCity] = useState("");
+  const [editReceivedAmount, setEditReceivedAmount] = useState("");
+  const [editDeliveryNotes, setEditDeliveryNotes] = useState("");
 
   useEffect(() => {
     setOrders(readStorageArray<SalesOrder>(SALES_ORDERS_STORAGE_KEY));
@@ -197,6 +195,61 @@ export function EnterpriseOrdersManager() {
       totalRevenue,
     };
   }, [orders]);
+
+  const filteredEditProducts = useMemo(() => {
+    const query = editProductSearch.trim().toLowerCase();
+    if (!query) {
+      return posProducts;
+    }
+
+    return posProducts.filter(
+      (product) => product.name.toLowerCase().includes(query) || product.sku.toLowerCase().includes(query)
+    );
+  }, [editProductSearch]);
+
+  const editSubtotal = useMemo(
+    () => editItems.reduce((sum, item) => sum + item.price * item.quantity, 0),
+    [editItems]
+  );
+
+  const editDiscount = useMemo(() => {
+    const value = Number(editDiscountAmount || 0);
+    if (Number.isNaN(value) || value < 0) {
+      return 0;
+    }
+
+    return Math.min(value, editSubtotal);
+  }, [editDiscountAmount, editSubtotal]);
+
+  const editTaxableAmount = useMemo(() => Math.max(0, editSubtotal - editDiscount), [editSubtotal, editDiscount]);
+
+  const editTaxValue = useMemo(() => {
+    const numericTaxRate = Number(editTaxRate || 0);
+    if (Number.isNaN(numericTaxRate) || numericTaxRate < 0) {
+      return 0;
+    }
+
+    return (editTaxableAmount * numericTaxRate) / 100;
+  }, [editTaxRate, editTaxableAmount]);
+
+  const editGrandTotal = useMemo(() => editTaxableAmount + editTaxValue, [editTaxableAmount, editTaxValue]);
+
+  const editSafeReceivedAmount = useMemo(() => {
+    const value = Number(editReceivedAmount || 0);
+    if (Number.isNaN(value) || value < 0) {
+      return 0;
+    }
+
+    return value;
+  }, [editReceivedAmount]);
+
+  const editRemainingAmount = useMemo(() => {
+    if (editPaymentMethod !== "other") {
+      return 0;
+    }
+
+    return Math.max(0, editGrandTotal - editSafeReceivedAmount);
+  }, [editGrandTotal, editPaymentMethod, editSafeReceivedAmount]);
 
   const columns = useMemo<Column<SalesOrder>[]>(
     () => [
@@ -270,7 +323,7 @@ export function EnterpriseOrdersManager() {
         ),
       },
     ],
-    [orders]
+    [invoices]
   );
 
   /**
@@ -437,17 +490,20 @@ export function EnterpriseOrdersManager() {
    * Opens order edit modal and seeds form state.
    */
   function openEditOrderModal(order: SalesOrder) {
+    const linkedInvoice = invoices.find((invoice) => invoice.id === order.invoiceId) ?? null;
+
     setEditingOrderId(order.id);
-    setEditForm({
-      receiverName: order.receiverName ?? "",
-      receiverPhone: order.receiverPhone ?? "",
-      receiverCity: order.receiverCity ?? "",
-      deliveryNotes: order.deliveryNotes ?? "",
-      status: order.status,
-      receivedAmount: String(order.receivedAmount ?? 0),
-      shippingCompanyId: order.shippingCompanyId ?? "",
-      shippingCost: order.shippingCost > 0 ? String(order.shippingCost) : "",
-    });
+    setEditProductSearch("");
+    setEditItems(linkedInvoice?.items ?? []);
+    setEditDiscountAmount(String(linkedInvoice?.discountAmount ?? 0));
+    setEditTaxRate(String(linkedInvoice?.taxRate ?? 15));
+    setEditPaymentMethod(linkedInvoice?.paymentMethod ?? order.paymentMethod);
+    setEditPaymentStatus(linkedInvoice?.paymentStatus ?? "unpaid");
+    setEditReceiverName(order.receiverName ?? "");
+    setEditReceiverPhone(order.receiverPhone ?? "");
+    setEditReceiverCity(order.receiverCity ?? "");
+    setEditReceivedAmount(String(order.receivedAmount ?? 0));
+    setEditDeliveryNotes(order.deliveryNotes ?? "");
   }
 
   /**
@@ -458,36 +514,80 @@ export function EnterpriseOrdersManager() {
       return;
     }
 
-    const receivedAmountParsed = Number(editForm.receivedAmount || 0);
-    const receivedAmount = Number.isNaN(receivedAmountParsed) || receivedAmountParsed < 0 ? 0 : receivedAmountParsed;
+    if (editItems.length === 0) {
+      toast.error("أضف منتجًا واحدًا على الأقل");
+      return;
+    }
 
-    const selectedShipping = shippingCompanies.find((company) => company.id === editForm.shippingCompanyId) ?? null;
-    const shippingParsed = Number(editForm.shippingCost || 0);
-    const shippingCost =
-      editForm.shippingCost.trim() === ""
-        ? selectedShipping?.avgCost ?? 0
-        : Number.isNaN(shippingParsed) || shippingParsed < 0
-          ? selectedShipping?.avgCost ?? 0
-          : shippingParsed;
+    if (!editReceiverName.trim() || !editReceiverPhone.trim() || !editReceiverCity.trim()) {
+      toast.error("يرجى تعبئة اسم المستلم ورقمه ومدينة الاستلام");
+      return;
+    }
 
-    const totalWithShipping = editingOrder.total + shippingCost;
-    const remainingAmount = Math.max(0, totalWithShipping - receivedAmount);
+    if (editPaymentMethod === "other" && editSafeReceivedAmount <= 0) {
+      toast.error("يرجى إدخال المبلغ المستلم عند اختيار طرق أخرى");
+      return;
+    }
+
+    const numericTaxRate = Number(editTaxRate || 0);
+    const safeTaxRate = Number.isNaN(numericTaxRate) || numericTaxRate < 0 ? 0 : numericTaxRate;
+
+    const computedPaymentStatus: SalesInvoice["paymentStatus"] =
+      editPaymentMethod === "cod"
+        ? "unpaid"
+        : editPaymentMethod === "bank_transfer"
+          ? "paid"
+          : editRemainingAmount > 0
+            ? "partial"
+            : "paid";
+
+    const receivedAmount = editPaymentMethod === "other" ? editSafeReceivedAmount : editGrandTotal;
+    const remainingAmount =
+      editPaymentMethod === "other"
+        ? editRemainingAmount
+        : editPaymentMethod === "cod"
+          ? editGrandTotal
+          : 0;
+
+    setInvoices((prev) =>
+      prev.map((invoice) =>
+        invoice.id === editingOrder.invoiceId
+          ? {
+              ...invoice,
+              paymentMethod: editPaymentMethod,
+              paymentStatus: computedPaymentStatus,
+              receiverName: editReceiverName.trim(),
+              receiverPhone: editReceiverPhone.trim(),
+              receiverCity: editReceiverCity.trim(),
+              receivedAmount,
+              remainingAmount,
+              deliveryNotes: editDeliveryNotes.trim(),
+              subtotal: editSubtotal,
+              discountAmount: editDiscount,
+              taxRate: safeTaxRate,
+              taxAmount: editTaxValue,
+              total: editGrandTotal,
+              items: editItems,
+            }
+          : invoice
+      )
+    );
 
     setOrders((prev) =>
       prev.map((order) =>
         order.id === editingOrder.id
           ? {
               ...order,
-              receiverName: editForm.receiverName.trim(),
-              receiverPhone: editForm.receiverPhone.trim(),
-              receiverCity: editForm.receiverCity.trim(),
-              deliveryNotes: editForm.deliveryNotes.trim(),
-              status: editForm.status,
+              receiverName: editReceiverName.trim(),
+              receiverPhone: editReceiverPhone.trim(),
+              receiverCity: editReceiverCity.trim(),
+              deliveryNotes: editDeliveryNotes.trim(),
+              status: order.status,
               receivedAmount,
               remainingAmount,
-              shippingCompanyId: selectedShipping?.id ?? null,
-              shippingCompanyName: selectedShipping?.company ?? "",
-              shippingCost,
+              paymentMethod: editPaymentMethod,
+              total: editGrandTotal,
+              itemCount: editItems.reduce((sum, item) => sum + item.quantity, 0),
             }
           : order
       )
@@ -495,6 +595,52 @@ export function EnterpriseOrdersManager() {
 
     setEditingOrderId(null);
     toast.success("تم تعديل الطلب");
+  }
+
+  /**
+   * Adds one catalog product to edit cart.
+   */
+  function addProductToEdit(product: PosLineItem) {
+    setEditItems((prev) => {
+      const existing = prev.find((item) => item.productId === product.productId);
+      if (existing) {
+        return prev.map((item) =>
+          item.productId === product.productId
+            ? {
+                ...item,
+                quantity: item.quantity + 1,
+              }
+            : item
+        );
+      }
+
+      return [
+        ...prev,
+        {
+          id: `line_${Date.now()}_${product.productId}`,
+          productId: product.productId,
+          name: product.name,
+          sku: product.sku,
+          price: product.price,
+          quantity: 1,
+        },
+      ];
+    });
+  }
+
+  /**
+   * Updates quantity for one edit cart line item.
+   */
+  function updateEditItemQuantity(itemId: string, quantity: number) {
+    const normalizedQuantity = Number.isNaN(quantity) ? 1 : Math.max(1, quantity);
+    setEditItems((prev) => prev.map((item) => (item.id === itemId ? { ...item, quantity: normalizedQuantity } : item)));
+  }
+
+  /**
+   * Removes one line item from edit cart.
+   */
+  function removeEditItem(itemId: string) {
+    setEditItems((prev) => prev.filter((item) => item.id !== itemId));
   }
 
   /**
@@ -733,7 +879,7 @@ export function EnterpriseOrdersManager() {
         isOpen={editingOrder !== null}
         onClose={() => setEditingOrderId(null)}
         title={editingOrder ? `تعديل الطلب ${editingOrder.orderNo}` : "تعديل الطلب"}
-        size="md"
+        size="xl"
         footer={
           <>
             <Button onClick={saveOrderEdits}>حفظ التعديل</Button>
@@ -741,77 +887,192 @@ export function EnterpriseOrdersManager() {
           </>
         }
       >
-        <div className="space-y-3">
-          <input
-            className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm"
-            placeholder="اسم المستلم"
-            value={editForm.receiverName}
-            onChange={(event) => setEditForm((prev) => ({ ...prev, receiverName: event.target.value }))}
-          />
+        <div className="grid gap-4 lg:grid-cols-2">
+          <div className="space-y-3 rounded-lg border border-slate-200 p-3">
+            <p className="text-sm font-semibold text-slate-800">بحث المنتجات وإضافتها</p>
+            <div className="relative">
+              <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                className="h-10 w-full rounded-lg border border-slate-200 pr-9 pl-3 text-sm"
+                placeholder="ابحث باسم المنتج أو SKU"
+                value={editProductSearch}
+                onChange={(event) => setEditProductSearch(event.target.value)}
+              />
+            </div>
 
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            <input
-              className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm"
-              placeholder="رقم المستلم"
-              value={editForm.receiverPhone}
-              onChange={(event) => setEditForm((prev) => ({ ...prev, receiverPhone: event.target.value }))}
-            />
-            <input
-              className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm"
-              placeholder="مدينة الاستلام"
-              value={editForm.receiverCity}
-              onChange={(event) => setEditForm((prev) => ({ ...prev, receiverCity: event.target.value }))}
-            />
+            <div className="max-h-72 space-y-2 overflow-y-auto">
+              {filteredEditProducts.map((product) => (
+                <div key={product.id} className="flex items-center justify-between rounded-lg border border-slate-100 bg-slate-50 p-3">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900">{product.name}</p>
+                    <p className="text-xs text-slate-500">{product.sku}</p>
+                    <p className="text-xs text-emerald-700">{product.price.toLocaleString()} ر.س</p>
+                  </div>
+                  <Button size="sm" onClick={() => addProductToEdit(product)}>
+                    إضافة
+                  </Button>
+                </div>
+              ))}
+            </div>
           </div>
 
-          <select
-            className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm"
-            value={editForm.status}
-            onChange={(event) => setEditForm((prev) => ({ ...prev, status: event.target.value as SalesOrder["status"] }))}
-          >
-            <option value="new">جديد</option>
-            <option value="processing">قيد التنفيذ</option>
-            <option value="completed">مكتمل</option>
-          </select>
+          <div className="space-y-3 rounded-lg border border-slate-200 p-3">
+            <div className="grid grid-cols-1 gap-2 rounded-lg border border-slate-200 bg-white p-3 md:grid-cols-2">
+              <input
+                className="h-9 rounded-lg border border-slate-200 px-2 text-sm"
+                placeholder="اسم المستلم"
+                value={editReceiverName}
+                onChange={(event) => setEditReceiverName(event.target.value)}
+              />
+              <input
+                className="h-9 rounded-lg border border-slate-200 px-2 text-sm"
+                placeholder="رقم المستلم"
+                value={editReceiverPhone}
+                onChange={(event) => setEditReceiverPhone(event.target.value)}
+              />
+              <input
+                className="h-9 rounded-lg border border-slate-200 px-2 text-sm md:col-span-2"
+                placeholder="مدينة الاستلام"
+                value={editReceiverCity}
+                onChange={(event) => setEditReceiverCity(event.target.value)}
+              />
+            </div>
 
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            <input
-              type="number"
-              min={0}
-              className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm"
-              placeholder="المبلغ المستلم"
-              value={editForm.receivedAmount}
-              onChange={(event) => setEditForm((prev) => ({ ...prev, receivedAmount: event.target.value }))}
-            />
-            <input
-              type="number"
-              min={0}
-              className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm"
-              placeholder="قيمة الشحن"
-              value={editForm.shippingCost}
-              onChange={(event) => setEditForm((prev) => ({ ...prev, shippingCost: event.target.value }))}
+            <p className="text-sm font-semibold text-slate-800">بنود الفاتورة</p>
+            {editItems.length === 0 ? (
+              <p className="text-sm text-slate-500">لم تتم إضافة منتجات بعد.</p>
+            ) : (
+              <div className="max-h-64 space-y-2 overflow-y-auto">
+                {editItems.map((item) => (
+                  <div key={item.id} className="rounded-lg border border-slate-100 bg-slate-50 p-3">
+                    <div className="mb-2 flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-semibold text-slate-900">{item.name}</p>
+                        <p className="text-xs text-slate-500">{item.sku}</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removeEditItem(item.id)}
+                        className="rounded-md border border-red-200 px-2 py-1 text-xs text-red-700 hover:bg-red-50"
+                      >
+                        حذف
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-3 items-center gap-2">
+                      <input
+                        type="number"
+                        min={1}
+                        className="h-9 rounded-lg border border-slate-200 px-2 text-sm"
+                        value={item.quantity}
+                        onChange={(event) => updateEditItemQuantity(item.id, Number(event.target.value))}
+                      />
+                      <p className="text-sm text-slate-600">{item.price.toLocaleString()} ر.س</p>
+                      <p className="text-left text-sm font-semibold text-emerald-700">
+                        {(item.price * item.quantity).toLocaleString()} ر.س
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="rounded-lg border border-emerald-100 bg-emerald-50 p-3">
+              <div className="grid grid-cols-2 gap-2 text-sm text-slate-700">
+                <p>المجموع الفرعي</p>
+                <p className="text-left">{editSubtotal.toLocaleString()} ر.س</p>
+                <p>الخصم</p>
+                <p className="text-left">- {editDiscount.toLocaleString()} ر.س</p>
+                <p>الضريبة</p>
+                <p className="text-left">+ {editTaxValue.toLocaleString()} ر.س</p>
+              </div>
+              <div className="mt-2 border-t border-emerald-200 pt-2">
+                <p className="text-sm text-slate-700">الإجمالي النهائي</p>
+                <p className="text-2xl font-bold text-emerald-700">{editGrandTotal.toLocaleString()} ر.س</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-2 rounded-lg border border-slate-200 bg-white p-3 md:grid-cols-4">
+              <div>
+                <p className="mb-1 text-xs text-slate-600">الخصم (قيمة)</p>
+                <input
+                  type="number"
+                  min={0}
+                  className="h-9 w-full rounded-lg border border-slate-200 px-2 text-sm"
+                  value={editDiscountAmount}
+                  onChange={(event) => setEditDiscountAmount(event.target.value)}
+                />
+              </div>
+
+              <div>
+                <p className="mb-1 text-xs text-slate-600">الضريبة %</p>
+                <input
+                  type="number"
+                  min={0}
+                  className="h-9 w-full rounded-lg border border-slate-200 px-2 text-sm"
+                  value={editTaxRate}
+                  onChange={(event) => setEditTaxRate(event.target.value)}
+                />
+              </div>
+
+              <div>
+                <p className="mb-1 text-xs text-slate-600">طريقة الدفع</p>
+                <select
+                  className="h-9 w-full rounded-lg border border-slate-200 px-2 text-sm"
+                  value={editPaymentMethod}
+                  onChange={(event) => setEditPaymentMethod(event.target.value as SalesInvoice["paymentMethod"])}
+                >
+                  <option value="bank_transfer">دفع بنكي</option>
+                  <option value="cod">عند الاستلام</option>
+                  <option value="other">طرق أخرى</option>
+                </select>
+              </div>
+
+              <div>
+                <p className="mb-1 text-xs text-slate-600">حالة الدفع</p>
+                <select
+                  className="h-9 w-full rounded-lg border border-slate-200 px-2 text-sm"
+                  value={editPaymentStatus}
+                  onChange={(event) => setEditPaymentStatus(event.target.value as SalesInvoice["paymentStatus"])}
+                >
+                  <option value="unpaid">غير مدفوعة</option>
+                  <option value="partial">مدفوعة جزئياً</option>
+                  <option value="paid">مدفوعة</option>
+                </select>
+              </div>
+            </div>
+
+            {editPaymentMethod === "other" ? (
+              <div className="grid grid-cols-1 gap-2 rounded-lg border border-slate-200 bg-white p-3 md:grid-cols-2">
+                <div>
+                  <p className="mb-1 text-xs text-slate-600">المبلغ المستلم</p>
+                  <input
+                    type="number"
+                    min={0}
+                    className="h-9 w-full rounded-lg border border-slate-200 px-2 text-sm"
+                    value={editReceivedAmount}
+                    onChange={(event) => setEditReceivedAmount(event.target.value)}
+                  />
+                </div>
+                <div>
+                  <p className="mb-1 text-xs text-slate-600">المبلغ المتبقي</p>
+                  <input
+                    type="number"
+                    className="h-9 w-full rounded-lg border border-slate-200 bg-slate-100 px-2 text-sm"
+                    value={editRemainingAmount}
+                    readOnly
+                  />
+                </div>
+              </div>
+            ) : null}
+
+            <textarea
+              className="min-h-[80px] rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              placeholder="ملاحظات التسليم"
+              value={editDeliveryNotes}
+              onChange={(event) => setEditDeliveryNotes(event.target.value)}
             />
           </div>
-
-          <select
-            className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm"
-            value={editForm.shippingCompanyId}
-            onChange={(event) => setEditForm((prev) => ({ ...prev, shippingCompanyId: event.target.value }))}
-          >
-            <option value="">بدون شركة شحن</option>
-            {shippingCompanies.map((company) => (
-              <option key={company.id} value={company.id}>
-                {company.company}
-              </option>
-            ))}
-          </select>
-
-          <textarea
-            className="min-h-[90px] w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-            placeholder="ملاحظات التسليم"
-            value={editForm.deliveryNotes}
-            onChange={(event) => setEditForm((prev) => ({ ...prev, deliveryNotes: event.target.value }))}
-          />
         </div>
       </AppModal>
     </section>
