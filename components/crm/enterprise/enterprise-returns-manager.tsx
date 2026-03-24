@@ -25,6 +25,8 @@ interface ReturnRecord {
   returnType: ReturnType;
   productId: string;
   productName: string;
+  replacementReturnedProductName?: string;
+  replacementNewProductName?: string;
   returnedQuantity: number;
   reason: string;
   customer: string;
@@ -36,6 +38,8 @@ interface ReturnFormState {
   returnType: ReturnType;
   productId: string;
   productName: string;
+  replacementReturnedProductName: string;
+  replacementNewProductName: string;
   returnedQuantity: string;
   reason: string;
   customer: string;
@@ -74,6 +78,8 @@ const initialFormState: ReturnFormState = {
   returnType: "refund",
   productId: "",
   productName: "",
+  replacementReturnedProductName: "",
+  replacementNewProductName: "",
   returnedQuantity: "",
   reason: "",
   customer: "",
@@ -88,8 +94,8 @@ const returnTypeLabel: Record<ReturnType, string> = {
 
 const returnStageLabel: Record<ReturnStage, string> = {
   received: "التسليم",
-  inspection: "الفحص",
-  maintenance: "الصيانة",
+  inspection: "اكتشاف الخطأ",
+  maintenance: "تصليحه",
   delivered: "التسليم النهائي",
 };
 
@@ -106,10 +112,27 @@ function getStageOptions(type: ReturnType): ReturnStage[] {
 }
 
 /**
+ * Calculates stage progress based on return type workflow.
+ */
+function getStageProgress(type: ReturnType, stage: ReturnStage): { currentStep: number; totalSteps: number; percent: number } {
+  const stages = getStageOptions(type);
+  const index = Math.max(stages.indexOf(stage), 0);
+  const currentStep = index + 1;
+  const totalSteps = stages.length;
+  const percent = Math.round((currentStep / totalSteps) * 100);
+
+  return {
+    currentStep,
+    totalSteps,
+    percent,
+  };
+}
+
+/**
  * Converts row fields to searchable text.
  */
 function toSearchText(row: ReturnRecord): string {
-  return `${row.productName} ${row.customer} ${row.reason} ${returnTypeLabel[row.returnType]} ${returnStageLabel[row.stage]} ${row.createdAt}`;
+  return `${row.productName} ${row.customer} ${row.reason} ${row.replacementReturnedProductName ?? ""} ${row.replacementNewProductName ?? ""} ${returnTypeLabel[row.returnType]} ${returnStageLabel[row.stage]} ${row.createdAt}`;
 }
 
 /**
@@ -219,7 +242,26 @@ export function EnterpriseReturnsManager() {
       { header: "العميل", accessor: "customer" },
       {
         header: "مرحلة المرتجع",
-        accessor: (row) => returnStageLabel[row.stage],
+        accessor: (row) => {
+          const progress = getStageProgress(row.returnType, row.stage);
+
+          return (
+            <div className="min-w-[190px] space-y-1.5">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-medium text-slate-700">{returnStageLabel[row.stage]}</span>
+                <span className="text-slate-500">
+                  {progress.currentStep}/{progress.totalSteps}
+                </span>
+              </div>
+              <div className="h-2 w-full overflow-hidden rounded-full bg-slate-200">
+                <div
+                  className="h-full rounded-full bg-emerald-500 transition-all"
+                  style={{ width: `${progress.percent}%` }}
+                />
+              </div>
+            </div>
+          );
+        },
       },
       {
         header: "الإجراءات",
@@ -266,6 +308,8 @@ export function EnterpriseReturnsManager() {
       returnType: row.returnType,
       productId: row.productId,
       productName: row.productName,
+      replacementReturnedProductName: row.replacementReturnedProductName ?? "",
+      replacementNewProductName: row.replacementNewProductName ?? "",
       returnedQuantity: String(row.returnedQuantity),
       reason: row.reason,
       customer: row.customer,
@@ -314,11 +358,27 @@ export function EnterpriseReturnsManager() {
       return;
     }
 
+    if (formState.returnType === "replacement") {
+      if (!formState.replacementReturnedProductName.trim()) {
+        toast.error("المنتج المرتجع مطلوب في حالة التبديل");
+        return;
+      }
+
+      if (!formState.replacementNewProductName.trim()) {
+        toast.error("المنتج المبدل مطلوب في حالة التبديل");
+        return;
+      }
+    }
+
     const payload: ReturnRecord = {
       id: editingId ?? `ret_${Date.now()}`,
       returnType: formState.returnType,
       productId: formState.productId,
       productName: formState.productName,
+      replacementReturnedProductName:
+        formState.returnType === "replacement" ? formState.replacementReturnedProductName.trim() : undefined,
+      replacementNewProductName:
+        formState.returnType === "replacement" ? formState.replacementNewProductName.trim() : undefined,
       returnedQuantity,
       reason: formState.reason.trim(),
       customer: formState.customer.trim(),
@@ -361,7 +421,7 @@ export function EnterpriseReturnsManager() {
       <SectionHeader
         align="right"
         title="إدارة المرتجعات"
-        description="نوع المرتجع، اختيار المنتج، الكمية، السبب، العميل ومراحل المعالجة حتى التسليم النهائي."
+        description="نوع المرتجع، العميل، المنتج، الكمية، السبب ومراحل المعالجة. في التالف: اكتشاف الخطأ ثم تصليحه."
       >
         <Button leftIcon={<Plus className="h-4 w-4" />} onClick={openCreateModal}>
           إضافة مرتجع
@@ -408,10 +468,10 @@ export function EnterpriseReturnsManager() {
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         title={editingId ? "تعديل المرتجع" : "إضافة مرتجع"}
-        description="أدخل بيانات المرتجع وحدد المرحلة حسب نوعه."
+        description="رتب إدخال البيانات: نوع المرتجع، العميل، المنتج، الكمية، ثم السبب والمرحلة."
       >
         <div className="grid gap-4 md:grid-cols-2">
-          <div className="space-y-2">
+          <div className="space-y-2 md:col-span-2">
             <label className="text-sm font-medium text-slate-700">نوع المرتجع</label>
             <select
               className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm"
@@ -429,15 +489,14 @@ export function EnterpriseReturnsManager() {
             </select>
           </div>
 
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-slate-700">الكمية المرتجعة</label>
+          <div className="space-y-2 md:col-span-2">
+            <label className="text-sm font-medium text-slate-700">اسم العميل</label>
             <input
-              type="number"
-              min={1}
+              type="text"
               className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm"
-              value={formState.returnedQuantity}
-              onChange={(event) => setFormState((prev) => ({ ...prev, returnedQuantity: event.target.value }))}
-              placeholder="مثال: 2"
+              value={formState.customer}
+              onChange={(event) => setFormState((prev) => ({ ...prev, customer: event.target.value }))}
+              placeholder="اسم العميل"
             />
           </div>
 
@@ -497,6 +556,58 @@ export function EnterpriseReturnsManager() {
           </div>
 
           <div className="space-y-2 md:col-span-2">
+            <label className="text-sm font-medium text-slate-700">الكمية المرتجعة</label>
+            <input
+              type="number"
+              min={1}
+              className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm"
+              value={formState.returnedQuantity}
+              onChange={(event) => setFormState((prev) => ({ ...prev, returnedQuantity: event.target.value }))}
+              placeholder="مثال: 2"
+            />
+          </div>
+
+          {formState.returnType === "replacement" && (
+            <>
+              <div className="space-y-2 md:col-span-2">
+                <label className="text-sm font-medium text-slate-700">المنتج المرتجع</label>
+                <select
+                  className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm"
+                  value={formState.replacementReturnedProductName}
+                  onChange={(event) =>
+                    setFormState((prev) => ({ ...prev, replacementReturnedProductName: event.target.value }))
+                  }
+                >
+                  <option value="">اختر المنتج المرتجع</option>
+                  {products.map((product) => (
+                    <option key={`returned_${product.id}`} value={String(product.productName ?? "")}>
+                      {product.productName}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-2 md:col-span-2">
+                <label className="text-sm font-medium text-slate-700">المنتج المبدل</label>
+                <select
+                  className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm"
+                  value={formState.replacementNewProductName}
+                  onChange={(event) =>
+                    setFormState((prev) => ({ ...prev, replacementNewProductName: event.target.value }))
+                  }
+                >
+                  <option value="">اختر المنتج المبدل</option>
+                  {products.map((product) => (
+                    <option key={`new_${product.id}`} value={String(product.productName ?? "")}>
+                      {product.productName}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </>
+          )}
+
+          <div className="space-y-2 md:col-span-2">
             <label className="text-sm font-medium text-slate-700">سبب المرتجع</label>
             <textarea
               rows={3}
@@ -504,17 +615,6 @@ export function EnterpriseReturnsManager() {
               value={formState.reason}
               onChange={(event) => setFormState((prev) => ({ ...prev, reason: event.target.value }))}
               placeholder="اكتب سبب المرتجع..."
-            />
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-slate-700">العميل</label>
-            <input
-              type="text"
-              className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm"
-              value={formState.customer}
-              onChange={(event) => setFormState((prev) => ({ ...prev, customer: event.target.value }))}
-              placeholder="اسم العميل"
             />
           </div>
 
