@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { Pencil, Printer, Save, Search, Trash2, X } from "lucide-react";
 import toast from "react-hot-toast";
@@ -48,6 +49,7 @@ interface SalesInvoice {
 }
 
 const SALES_INVOICES_STORAGE_KEY = "crm-enterprise-sales-invoices";
+const SALES_ORDERS_STORAGE_KEY = "crm-enterprise-sales-orders";
 
 const paymentMethodLabel: Record<SalesInvoice["paymentMethod"], string> = {
   bank_transfer: "دفع بنكي",
@@ -170,6 +172,7 @@ function normalizeSalesInvoice(raw: unknown): SalesInvoice | null {
  * Shows and edits POS invoice details for the selected invoice.
  */
 export default function InvoiceDetailsPage({ params }: InvoiceDetailsPageProps) {
+  const router = useRouter();
   const [invoices, setInvoices] = useState<SalesInvoice[]>([]);
   const [isReady, setIsReady] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -341,6 +344,46 @@ export default function InvoiceDetailsPage({ params }: InvoiceDetailsPageProps) 
   }
 
   /**
+   * Deletes invoice from storage and removes linked order rows.
+   */
+  function deleteInvoice() {
+    if (!invoice) {
+      return;
+    }
+
+    const confirmed = window.confirm(`هل تريد حذف الفاتورة ${invoice.invoiceNo}؟`);
+    if (!confirmed) {
+      return;
+    }
+
+    const nextInvoices = invoices.filter((item) => item.id !== invoice.id);
+    persistInvoices(nextInvoices);
+
+    try {
+      const rawOrders = window.localStorage.getItem(SALES_ORDERS_STORAGE_KEY);
+      const parsedOrders = rawOrders ? (JSON.parse(rawOrders) as unknown) : [];
+
+      if (Array.isArray(parsedOrders)) {
+        const nextOrders = parsedOrders.filter((row) => {
+          if (!row || typeof row !== "object") {
+            return true;
+          }
+
+          const order = row as { invoiceId?: unknown };
+          return order.invoiceId !== invoice.id;
+        });
+
+        window.localStorage.setItem(SALES_ORDERS_STORAGE_KEY, JSON.stringify(nextOrders));
+      }
+    } catch {
+      // Ignore order cleanup failure and keep invoice deletion successful.
+    }
+
+    toast.success("تم حذف الفاتورة");
+    router.push("/dashboard/crm-enterprise/orders");
+  }
+
+  /**
    * Shares current invoice URL using Web Share API or clipboard fallback.
    */
   async function shareInvoice() {
@@ -391,7 +434,36 @@ export default function InvoiceDetailsPage({ params }: InvoiceDetailsPageProps) 
         description={`عميل: ${currentInvoice.customerName} - التاريخ: ${currentInvoice.date}`}
       >
         <div className="flex flex-wrap items-center gap-2 print:hidden">
-          
+          {!isEditing ? (
+            <>
+              <Button variant="outline" onClick={printInvoice}>
+                <Printer className="h-4 w-4" />
+                طباعة
+              </Button>
+              <Button variant="outline" onClick={shareInvoice}>
+                مشاركة الفاتورة
+              </Button>
+              <Button onClick={startEditing}>
+                <Pencil className="h-4 w-4" />
+                تعديل الفاتورة
+              </Button>
+              <Button variant="destructive" onClick={deleteInvoice}>
+                <Trash2 className="h-4 w-4" />
+                حذف الفاتورة
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button variant="outline" onClick={cancelEditing}>
+                <X className="h-4 w-4" />
+                إلغاء
+              </Button>
+              <Button onClick={saveInvoiceChanges}>
+                <Save className="h-4 w-4" />
+                حفظ التعديلات
+              </Button>
+            </>
+          )}
         </div>
       </SectionHeader>
 
