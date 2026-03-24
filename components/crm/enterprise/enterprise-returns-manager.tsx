@@ -318,7 +318,18 @@ export function EnterpriseReturnsManager() {
       },
       {
         header: "ملاحظة المرحلة الحالية",
-        accessor: (row) => row.stageNotes?.[row.stage] || "-",
+        accessor: (row) => (
+          <div className="flex min-w-[220px] items-center justify-between gap-2">
+            <p className="line-clamp-2 text-xs text-slate-700">{row.stageNotes?.[row.stage] || "-"}</p>
+            <button
+              type="button"
+              className="rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-700 hover:bg-slate-50"
+              onClick={() => handleQuickEditCurrentStageNote(row)}
+            >
+              تعديل سريع
+            </button>
+          </div>
+        ),
       },
       {
         header: "الإجراءات",
@@ -491,6 +502,37 @@ export function EnterpriseReturnsManager() {
 
     setRows((prev) => prev.filter((item) => item.id !== row.id));
     toast.success("تم حذف المرتجع");
+  }
+
+  /**
+   * Edits current stage note directly from table without opening modal.
+   */
+  function handleQuickEditCurrentStageNote(row: ReturnRecord) {
+    const currentNote = row.stageNotes?.[row.stage] ?? "";
+    const nextNote = window.prompt(`ملاحظة مرحلة ${returnStageLabel[row.stage]}`, currentNote);
+
+    if (nextNote === null) {
+      return;
+    }
+
+    setRows((prev) =>
+      prev.map((item) => {
+        if (item.id !== row.id) {
+          return item;
+        }
+
+        return {
+          ...item,
+          stageNotes: {
+            ...createEmptyStageNotes(),
+            ...item.stageNotes,
+            [row.stage]: nextNote.trim(),
+          },
+        };
+      })
+    );
+
+    toast.success("تم تحديث ملاحظة المرحلة");
   }
 
   return (
