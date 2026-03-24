@@ -434,36 +434,7 @@ export default function InvoiceDetailsPage({ params }: InvoiceDetailsPageProps) 
         description={`عميل: ${currentInvoice.customerName} - التاريخ: ${currentInvoice.date}`}
       >
         <div className="flex flex-wrap items-center gap-2 print:hidden">
-          {!isEditing ? (
-            <>
-              <Button variant="outline" onClick={printInvoice}>
-                <Printer className="h-4 w-4" />
-                طباعة
-              </Button>
-              <Button variant="outline" onClick={shareInvoice}>
-                مشاركة الفاتورة
-              </Button>
-              <Button onClick={startEditing}>
-                <Pencil className="h-4 w-4" />
-                تعديل الفاتورة
-              </Button>
-              <Button variant="danger" onClick={deleteInvoice}>
-                <Trash2 className="h-4 w-4" />
-                حذف الفاتورة
-              </Button>
-            </>
-          ) : (
-            <>
-              <Button variant="outline" onClick={cancelEditing}>
-                <X className="h-4 w-4" />
-                إلغاء
-              </Button>
-              <Button onClick={saveInvoiceChanges}>
-                <Save className="h-4 w-4" />
-                حفظ التعديلات
-              </Button>
-            </>
-          )}
+      
         </div>
       </SectionHeader>
 

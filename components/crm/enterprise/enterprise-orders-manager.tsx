@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Eye, MessageCircle, Share2, Truck } from "lucide-react";
+import { Eye, MessageCircle, Pencil, Share2, Trash2, Truck } from "lucide-react";
 import toast from "react-hot-toast";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { AppModal } from "@/components/ui/app-modal";
@@ -70,6 +70,17 @@ interface ShippingCompany {
   avgCost: number;
 }
 
+interface EditOrderFormState {
+  receiverName: string;
+  receiverPhone: string;
+  receiverCity: string;
+  deliveryNotes: string;
+  status: SalesOrder["status"];
+  receivedAmount: string;
+  shippingCompanyId: string;
+  shippingCost: string;
+}
+
 const SALES_INVOICES_STORAGE_KEY = "crm-enterprise-sales-invoices";
 const SALES_ORDERS_STORAGE_KEY = "crm-enterprise-sales-orders";
 const SHIPPING_COMPANIES_STORAGE_KEY = "crm-enterprise-shipping-companies";
@@ -123,8 +134,19 @@ export function EnterpriseOrdersManager() {
   const [page, setPage] = useState(1);
   const [detailsOrderId, setDetailsOrderId] = useState<string | null>(null);
   const [shippingOrderId, setShippingOrderId] = useState<string | null>(null);
+  const [editingOrderId, setEditingOrderId] = useState<string | null>(null);
   const [selectedShippingCompanyId, setSelectedShippingCompanyId] = useState("");
   const [shippingAmountInput, setShippingAmountInput] = useState("");
+  const [editForm, setEditForm] = useState<EditOrderFormState>({
+    receiverName: "",
+    receiverPhone: "",
+    receiverCity: "",
+    deliveryNotes: "",
+    status: "new",
+    receivedAmount: "0",
+    shippingCompanyId: "",
+    shippingCost: "",
+  });
 
   useEffect(() => {
     setOrders(readStorageArray<SalesOrder>(SALES_ORDERS_STORAGE_KEY));
@@ -157,6 +179,11 @@ export function EnterpriseOrdersManager() {
   const shippingOrder = useMemo(
     () => orders.find((order) => order.id === shippingOrderId) ?? null,
     [orders, shippingOrderId]
+  );
+
+  const editingOrder = useMemo(
+    () => orders.find((order) => order.id === editingOrderId) ?? null,
+    [orders, editingOrderId]
   );
 
   const totals = useMemo(() => {
@@ -196,7 +223,7 @@ export function EnterpriseOrdersManager() {
       {
         header: "إجراءات",
         accessor: (row) => (
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               onClick={() => setDetailsOrderId(row.id)}
@@ -224,6 +251,20 @@ export function EnterpriseOrdersManager() {
               className="inline-flex items-center gap-1 rounded-md border border-emerald-200 px-2 py-1 text-xs text-emerald-700 hover:bg-emerald-50"
             >
               <Truck className="h-3.5 w-3.5" /> تعيين شركة الشحن
+            </button>
+            <button
+              type="button"
+              onClick={() => openEditOrderModal(row)}
+              className="inline-flex items-center gap-1 rounded-md border border-amber-200 px-2 py-1 text-xs text-amber-700 hover:bg-amber-50"
+            >
+              <Pencil className="h-3.5 w-3.5" /> تعديل
+            </button>
+            <button
+              type="button"
+              onClick={() => deleteOrder(row)}
+              className="inline-flex items-center gap-1 rounded-md border border-red-200 px-2 py-1 text-xs text-red-700 hover:bg-red-50"
+            >
+              <Trash2 className="h-3.5 w-3.5" /> حذف
             </button>
           </div>
         ),
@@ -390,6 +431,88 @@ export function EnterpriseOrdersManager() {
     setSelectedShippingCompanyId("");
     setShippingAmountInput("");
     toast.success("تم تعيين شركة الشحن وتحديث قيمة الشحنة");
+  }
+
+  /**
+   * Opens order edit modal and seeds form state.
+   */
+  function openEditOrderModal(order: SalesOrder) {
+    setEditingOrderId(order.id);
+    setEditForm({
+      receiverName: order.receiverName ?? "",
+      receiverPhone: order.receiverPhone ?? "",
+      receiverCity: order.receiverCity ?? "",
+      deliveryNotes: order.deliveryNotes ?? "",
+      status: order.status,
+      receivedAmount: String(order.receivedAmount ?? 0),
+      shippingCompanyId: order.shippingCompanyId ?? "",
+      shippingCost: order.shippingCost > 0 ? String(order.shippingCost) : "",
+    });
+  }
+
+  /**
+   * Saves edited order fields from modal.
+   */
+  function saveOrderEdits() {
+    if (!editingOrder) {
+      return;
+    }
+
+    const receivedAmountParsed = Number(editForm.receivedAmount || 0);
+    const receivedAmount = Number.isNaN(receivedAmountParsed) || receivedAmountParsed < 0 ? 0 : receivedAmountParsed;
+
+    const selectedShipping = shippingCompanies.find((company) => company.id === editForm.shippingCompanyId) ?? null;
+    const shippingParsed = Number(editForm.shippingCost || 0);
+    const shippingCost =
+      editForm.shippingCost.trim() === ""
+        ? selectedShipping?.avgCost ?? 0
+        : Number.isNaN(shippingParsed) || shippingParsed < 0
+          ? selectedShipping?.avgCost ?? 0
+          : shippingParsed;
+
+    const totalWithShipping = editingOrder.total + shippingCost;
+    const remainingAmount = Math.max(0, totalWithShipping - receivedAmount);
+
+    setOrders((prev) =>
+      prev.map((order) =>
+        order.id === editingOrder.id
+          ? {
+              ...order,
+              receiverName: editForm.receiverName.trim(),
+              receiverPhone: editForm.receiverPhone.trim(),
+              receiverCity: editForm.receiverCity.trim(),
+              deliveryNotes: editForm.deliveryNotes.trim(),
+              status: editForm.status,
+              receivedAmount,
+              remainingAmount,
+              shippingCompanyId: selectedShipping?.id ?? null,
+              shippingCompanyName: selectedShipping?.company ?? "",
+              shippingCost,
+            }
+          : order
+      )
+    );
+
+    setEditingOrderId(null);
+    toast.success("تم تعديل الطلب");
+  }
+
+  /**
+   * Deletes one order row from table and storage.
+   */
+  function deleteOrder(order: SalesOrder) {
+    const confirmed = window.confirm(`هل تريد حذف الطلب ${order.orderNo}؟`);
+    if (!confirmed) {
+      return;
+    }
+
+    setOrders((prev) => prev.filter((item) => item.id !== order.id));
+
+    if (detailsOrderId === order.id) {
+      setDetailsOrderId(null);
+    }
+
+    toast.success("تم حذف الطلب");
   }
 
   return (
@@ -603,6 +726,92 @@ export function EnterpriseOrdersManager() {
               القيمة الافتراضية من شركة الشحن: {shippingCompanies.find((item) => item.id === selectedShippingCompanyId)?.avgCost ?? 0}
             </p>
           ) : null}
+        </div>
+      </AppModal>
+
+      <AppModal
+        isOpen={editingOrder !== null}
+        onClose={() => setEditingOrderId(null)}
+        title={editingOrder ? `تعديل الطلب ${editingOrder.orderNo}` : "تعديل الطلب"}
+        size="md"
+        footer={
+          <>
+            <Button onClick={saveOrderEdits}>حفظ التعديل</Button>
+            <Button variant="outline" onClick={() => setEditingOrderId(null)}>إلغاء</Button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          <input
+            className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm"
+            placeholder="اسم المستلم"
+            value={editForm.receiverName}
+            onChange={(event) => setEditForm((prev) => ({ ...prev, receiverName: event.target.value }))}
+          />
+
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <input
+              className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm"
+              placeholder="رقم المستلم"
+              value={editForm.receiverPhone}
+              onChange={(event) => setEditForm((prev) => ({ ...prev, receiverPhone: event.target.value }))}
+            />
+            <input
+              className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm"
+              placeholder="مدينة الاستلام"
+              value={editForm.receiverCity}
+              onChange={(event) => setEditForm((prev) => ({ ...prev, receiverCity: event.target.value }))}
+            />
+          </div>
+
+          <select
+            className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm"
+            value={editForm.status}
+            onChange={(event) => setEditForm((prev) => ({ ...prev, status: event.target.value as SalesOrder["status"] }))}
+          >
+            <option value="new">جديد</option>
+            <option value="processing">قيد التنفيذ</option>
+            <option value="completed">مكتمل</option>
+          </select>
+
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <input
+              type="number"
+              min={0}
+              className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm"
+              placeholder="المبلغ المستلم"
+              value={editForm.receivedAmount}
+              onChange={(event) => setEditForm((prev) => ({ ...prev, receivedAmount: event.target.value }))}
+            />
+            <input
+              type="number"
+              min={0}
+              className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm"
+              placeholder="قيمة الشحن"
+              value={editForm.shippingCost}
+              onChange={(event) => setEditForm((prev) => ({ ...prev, shippingCost: event.target.value }))}
+            />
+          </div>
+
+          <select
+            className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm"
+            value={editForm.shippingCompanyId}
+            onChange={(event) => setEditForm((prev) => ({ ...prev, shippingCompanyId: event.target.value }))}
+          >
+            <option value="">بدون شركة شحن</option>
+            {shippingCompanies.map((company) => (
+              <option key={company.id} value={company.id}>
+                {company.company}
+              </option>
+            ))}
+          </select>
+
+          <textarea
+            className="min-h-[90px] w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+            placeholder="ملاحظات التسليم"
+            value={editForm.deliveryNotes}
+            onChange={(event) => setEditForm((prev) => ({ ...prev, deliveryNotes: event.target.value }))}
+          />
         </div>
       </AppModal>
     </section>
