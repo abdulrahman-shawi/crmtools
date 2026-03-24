@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { EnterpriseModuleManager } from "@/components/crm/enterprise-module-manager";
+import { EnterpriseModuleGate } from "@/components/crm/enterprise/enterprise-module-gate";
 import { crmEnterpriseModules, crmEnterpriseNavigation } from "@/lib/data/mock-crm-enterprise";
 
 interface CrmEnterpriseModulePageProps {
@@ -20,7 +20,7 @@ export function generateStaticParams() {
 }
 
 /**
- * Renders selected CRM enterprise module page.
+ * Renders selected CRM enterprise module page with permission gate.
  */
 export default function CrmEnterpriseModulePage({ params }: CrmEnterpriseModulePageProps) {
   if (dedicatedModuleSlugs.has(params.module)) {
@@ -33,5 +33,5 @@ export default function CrmEnterpriseModulePage({ params }: CrmEnterpriseModuleP
     notFound();
   }
 
-  return <EnterpriseModuleManager module={currentModule} />;
+  return <EnterpriseModuleGate module={currentModule} moduleName={params.module} />;
 }

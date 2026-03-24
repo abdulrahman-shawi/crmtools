@@ -56,6 +56,36 @@ const defaultUser: AppUser = {
     "announcements:manage",
     "documents:manage",
     "payslips:manage",
+    // Expenses
+    "expenses:view",
+    "expenses:create",
+    "expenses:edit",
+    "expenses:delete",
+    // Cash Flow
+    "flows:view",
+    "flows:create",
+    "flows:edit",
+    "flows:delete",
+    // Warehouses
+    "warehouses:view",
+    "warehouses:create",
+    "warehouses:edit",
+    "warehouses:delete",
+    // Shipping Companies
+    "companies:view",
+    "companies:create",
+    "companies:edit",
+    "companies:delete",
+    // Returns
+    "returns:view",
+    "returns:create",
+    "returns:edit",
+    "returns:delete",
+    // Team Tasks
+    "tasks:view",
+    "tasks:create",
+    "tasks:edit",
+    "tasks:delete",
   ],
 };
 

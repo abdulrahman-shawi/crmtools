@@ -56,6 +56,11 @@ const allSystemPermissions: TeamPermissionOption[] = [
   { key: "editOrders", label: "تعديل الطلبات", group: "CRM" },
   { key: "deleteOrders", label: "حذف الطلبات", group: "CRM" },
   { key: "viewAnalytics", label: "عرض التحليلات", group: "CRM" },
+  { key: RBAC_PERMISSIONS.returnsView, label: "عرض المرتجعات", group: "CRM" },
+  { key: RBAC_PERMISSIONS.returnsCreate, label: "إضافة مرتجع", group: "CRM" },
+  { key: RBAC_PERMISSIONS.returnsEdit, label: "تعديل المرتجعات", group: "CRM" },
+  { key: RBAC_PERMISSIONS.returnsDelete, label: "حذف المرتجعات", group: "CRM" },
+
   { key: "viewEmployees", label: "عرض الموظفين", group: "HR" },
   { key: "addEmployees", label: "إضافة الموظفين", group: "HR" },
   { key: "editEmployees", label: "تعديل الموظفين", group: "HR" },
@@ -67,9 +72,41 @@ const allSystemPermissions: TeamPermissionOption[] = [
   { key: RBAC_PERMISSIONS.trainingCreate, label: "إضافة برامج التدريب", group: "HR" },
   { key: RBAC_PERMISSIONS.trainingEdit, label: "تعديل برامج التدريب", group: "HR" },
   { key: RBAC_PERMISSIONS.trainingDelete, label: "حذف برامج التدريب", group: "HR" },
+
   { key: RBAC_PERMISSIONS.announcementsManage, label: "إدارة الإعلانات", group: "HR Self-Service" },
   { key: RBAC_PERMISSIONS.documentsManage, label: "إدارة المستندات", group: "HR Self-Service" },
   { key: RBAC_PERMISSIONS.payslipsManage, label: "إدارة مسيرات الرواتب", group: "HR Self-Service" },
+
+  // Expenses
+  { key: RBAC_PERMISSIONS.expensesView, label: "عرض المصاريف", group: "المالية" },
+  { key: RBAC_PERMISSIONS.expensesCreate, label: "إضافة مصروف", group: "المالية" },
+  { key: RBAC_PERMISSIONS.expensesEdit, label: "تعديل المصاريف", group: "المالية" },
+  { key: RBAC_PERMISSIONS.expensesDelete, label: "حذف المصاريف", group: "المالية" },
+
+  // Cash Flow
+  { key: RBAC_PERMISSIONS.flowsView, label: "عرض حركة الصندوق", group: "المالية" },
+  { key: RBAC_PERMISSIONS.flowsCreate, label: "إضافة حركة صندوق", group: "المالية" },
+  { key: RBAC_PERMISSIONS.flowsEdit, label: "تعديل حركة الصندوق", group: "المالية" },
+  { key: RBAC_PERMISSIONS.flowsDelete, label: "حذف حركة الصندوق", group: "المالية" },
+
+  // Warehouses
+  { key: RBAC_PERMISSIONS.warehousesView, label: "عرض المخازن", group: "المستودعات" },
+  { key: RBAC_PERMISSIONS.warehousesCreate, label: "إضافة مخزن", group: "المستودعات" },
+  { key: RBAC_PERMISSIONS.warehousesEdit, label: "تعديل المخازن", group: "المستودعات" },
+  { key: RBAC_PERMISSIONS.warehousesDelete, label: "حذف المخازن", group: "المستودعات" },
+
+  // Shipping Companies
+  { key: RBAC_PERMISSIONS.companiesView, label: "عرض شركات الشحن", group: "الشحن" },
+  { key: RBAC_PERMISSIONS.companiesCreate, label: "إضافة شركة شحن", group: "الشحن" },
+  { key: RBAC_PERMISSIONS.companiesEdit, label: "تعديل شركات الشحن", group: "الشحن" },
+  { key: RBAC_PERMISSIONS.companiesDelete, label: "حذف شركات الشحن", group: "الشحن" },
+
+  // Team Tasks
+  { key: RBAC_PERMISSIONS.tasksView, label: "عرض مهام الفريق", group: "المهام" },
+  { key: RBAC_PERMISSIONS.tasksCreate, label: "إضافة مهمة", group: "المهام" },
+  { key: RBAC_PERMISSIONS.tasksEdit, label: "تعديل المهام", group: "المهام" },
+  { key: RBAC_PERMISSIONS.tasksDelete, label: "حذف المهام", group: "المهام" },
+
   { key: RBAC_PERMISSIONS.dataSearch, label: "البحث في البيانات", group: "System" },
   { key: RBAC_PERMISSIONS.dataExport, label: "تصدير البيانات", group: "System" },
   { key: RBAC_PERMISSIONS.dataImport, label: "استيراد البيانات", group: "System" },
