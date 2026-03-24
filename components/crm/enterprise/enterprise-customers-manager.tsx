@@ -371,7 +371,7 @@ const initialCustomers: EnterpriseCustomer[] = [
     contactPersons: ["أحمد الزهراني"],
     country: "SA",
     city: "الرياض",
-    phone: "+966501234567",
+    phone: "+963968988913",
     email: "a.alzahrani@nukhba.sa",
     status: "active",
     tier: "gold",
