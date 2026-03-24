@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { ArrowRight, Plus, Trash2, RotateCw } from "lucide-react";
 import toast from "react-hot-toast";
+import { useAuth } from "@/context/AuthContext";
+import { can, RBAC_PERMISSIONS } from "@/lib/rbac";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { AppModal } from "@/components/ui/app-modal";
 import { Button } from "@/components/ui/button";
@@ -78,6 +80,12 @@ const initialTransferFormState: TransferFormState = {
  * Manages warehouse movements and inventory transfers.
  */
 export function EnterpriseWarehouseMovementsManager() {
+  const { user } = useAuth();
+
+  // Permission checks
+  const canCreate = can(user, RBAC_PERMISSIONS.flowsCreate);
+  const canDelete = can(user, RBAC_PERMISSIONS.flowsDelete);
+
   const [warehouses, setWarehouses] = useState<WarehouseRecord[]>([]);
   const [products, setProducts] = useState<ProductEntry[]>([]);
   const [movements, setMovements] = useState<WarehouseMovement[]>([]);
@@ -232,6 +240,11 @@ export function EnterpriseWarehouseMovementsManager() {
    * Handles product transfer between warehouses.
    */
   function handleTransfer() {
+    if (!canCreate) {
+      toast.error("ليس لديك صلاحية لإضافة حركة صندوق");
+      return;
+    }
+
     if (!transferFormState.productId || !transferFormState.fromWarehouseId || !transferFormState.toWarehouseId) {
       toast.error("الرجاء تحديد المنتج والمخازن");
       return;
@@ -330,6 +343,11 @@ export function EnterpriseWarehouseMovementsManager() {
    * Deletes a movement record.
    */
   function handleDeleteMovement(movement: WarehouseMovement) {
+    if (!canDelete) {
+      toast.error("ليس لديك صلاحية لحذف حركات الصندوق");
+      return;
+    }
+
     const confirmed = window.confirm("هل تريد حذف هذه الحركة؟");
     if (!confirmed) {
       return;
@@ -378,17 +396,19 @@ export function EnterpriseWarehouseMovementsManager() {
       {
         header: "الإجراءات",
         accessor: (row) => (
-          <button
-            onClick={() => handleDeleteMovement(row)}
-            className="rounded-md border border-red-200 p-1.5 text-red-700 hover:bg-red-50"
-            title="حذف"
-          >
-            <Trash2 className="h-4 w-4" />
-          </button>
+          canDelete ? (
+            <button
+              onClick={() => handleDeleteMovement(row)}
+              className="rounded-md border border-red-200 p-1.5 text-red-700 hover:bg-red-50"
+              title="حذف"
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          ) : null
         ),
       },
     ],
-    []
+    [canDelete]
   );
 
   return (
@@ -398,9 +418,11 @@ export function EnterpriseWarehouseMovementsManager() {
         title="حركات الصندوق وانتقالات المخزون"
         description="إدارة انتقالات المنتجات والمواد بين المخازن المختلفة ومتابعة حركات المخزون."
       >
-        <Button leftIcon={<Plus className="h-4 w-4" />} onClick={() => setIsTransferModalOpen(true)}>
-          إضافة نقل
-        </Button>
+        {canCreate && (
+          <Button leftIcon={<Plus className="h-4 w-4" />} onClick={() => setIsTransferModalOpen(true)}>
+            إضافة نقل
+          </Button>
+        )}
       </SectionHeader>
 
       {/* Statistics Cards */}

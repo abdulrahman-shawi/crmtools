@@ -3,6 +3,8 @@
 import { useMemo, useState } from "react";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import toast from "react-hot-toast";
+import { useAuth } from "@/context/AuthContext";
+import { can, RBAC_PERMISSIONS } from "@/lib/rbac";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { AppModal } from "@/components/ui/app-modal";
 import { Button } from "@/components/ui/button";
@@ -47,6 +49,11 @@ export function EnterpriseModuleManager({ module }: EnterpriseModuleManagerProps
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formState, setFormState] = useState<Record<string, string>>(() => buildInitialForm(module.fields));
 
+  const { user } = useAuth();
+  const canCreate = can(user, RBAC_PERMISSIONS.tasksCreate);
+  const canEdit   = can(user, RBAC_PERMISSIONS.tasksEdit);
+  const canDelete = can(user, RBAC_PERMISSIONS.tasksDelete);
+
   const numericFieldKey = useMemo(() => {
     const preferred = ["amount", "total", "value", "annualValue", "price"];
     const preferredMatch = preferred.find((key) => module.fields.some((field) => field.key === key && field.type === "number"));
@@ -81,31 +88,39 @@ export function EnterpriseModuleManager({ module }: EnterpriseModuleManagerProps
         header: "الإجراءات",
         accessor: (row: CrmModuleRow) => (
           <div className="flex items-center gap-1">
-            <button
-              onClick={() => openEditModal(row)}
-              className="rounded-md border border-slate-200 p-1.5 text-slate-700 hover:bg-slate-50"
-              title="تعديل"
-            >
-              <Pencil className="h-4 w-4" />
-            </button>
-            <button
-              onClick={() => handleDelete(row)}
-              className="rounded-md border border-red-200 p-1.5 text-red-700 hover:bg-red-50"
-              title="حذف"
-            >
-              <Trash2 className="h-4 w-4" />
-            </button>
+            {canEdit && (
+              <button
+                onClick={() => openEditModal(row)}
+                className="rounded-md border border-slate-200 p-1.5 text-slate-700 hover:bg-slate-50"
+                title="تعديل"
+              >
+                <Pencil className="h-4 w-4" />
+              </button>
+            )}
+            {canDelete && (
+              <button
+                onClick={() => handleDelete(row)}
+                className="rounded-md border border-red-200 p-1.5 text-red-700 hover:bg-red-50"
+                title="حذف"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+            )}
           </div>
         ),
       },
     ],
-    [module.columns]
+    [module.columns, canEdit, canDelete]
   );
 
   /**
    * Opens create modal with empty form.
    */
   function openCreateModal() {
+    if (!canCreate) {
+      toast.error("ليس لديك صلاحية لإضافة سجلات");
+      return;
+    }
     setEditingId(null);
     setFormState(buildInitialForm(module.fields));
     setIsModalOpen(true);
@@ -115,6 +130,10 @@ export function EnterpriseModuleManager({ module }: EnterpriseModuleManagerProps
    * Opens edit modal using current row values.
    */
   function openEditModal(row: CrmModuleRow) {
+    if (!canEdit) {
+      toast.error("ليس لديك صلاحية لتعديل السجلات");
+      return;
+    }
     const nextState = buildInitialForm(module.fields);
     module.fields.forEach((field) => {
       nextState[field.key] = String(row[field.key] ?? "");
@@ -169,6 +188,10 @@ export function EnterpriseModuleManager({ module }: EnterpriseModuleManagerProps
    * Deletes row after user confirmation.
    */
   function handleDelete(row: CrmModuleRow) {
+    if (!canDelete) {
+      toast.error("ليس لديك صلاحية لحذف السجلات");
+      return;
+    }
     const confirmed = window.confirm("هل تريد حذف هذا السجل؟");
     if (!confirmed) {
       return;
@@ -181,9 +204,11 @@ export function EnterpriseModuleManager({ module }: EnterpriseModuleManagerProps
   return (
     <section className="space-y-6">
       <SectionHeader align="right" title={module.title} description={module.description}>
-        <Button leftIcon={<Plus className="h-4 w-4" />} onClick={openCreateModal}>
-          {module.addLabel}
-        </Button>
+        {canCreate && (
+          <Button leftIcon={<Plus className="h-4 w-4" />} onClick={openCreateModal}>
+            {module.addLabel}
+          </Button>
+        )}
       </SectionHeader>
 
       <div className="grid gap-4 md:grid-cols-3">

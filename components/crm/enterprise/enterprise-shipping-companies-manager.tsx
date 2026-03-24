@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import toast from "react-hot-toast";
+import { useAuth } from "@/context/AuthContext";
+import { can, RBAC_PERMISSIONS } from "@/lib/rbac";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { AppModal } from "@/components/ui/app-modal";
 import { Button } from "@/components/ui/button";
@@ -53,6 +55,13 @@ function toSearchText(row: ShippingCompanyRow): string {
  * Manages shipping companies with local persistence.
  */
 export function EnterpriseShippingCompaniesManager() {
+  const { user } = useAuth();
+
+  // Permission checks
+  const canCreate = can(user, RBAC_PERMISSIONS.companiesCreate);
+  const canEdit = can(user, RBAC_PERMISSIONS.companiesEdit);
+  const canDelete = can(user, RBAC_PERMISSIONS.companiesDelete);
+
   const [rows, setRows] = useState<ShippingCompanyRow[]>(initialRows);
   const [page, setPage] = useState(1);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -108,31 +117,40 @@ export function EnterpriseShippingCompaniesManager() {
         header: "الإجراءات",
         accessor: (row) => (
           <div className="flex items-center gap-1">
-            <button
-              onClick={() => openEditModal(row)}
-              className="rounded-md border border-slate-200 p-1.5 text-slate-700 hover:bg-slate-50"
-              title="تعديل"
-            >
-              <Pencil className="h-4 w-4" />
-            </button>
-            <button
-              onClick={() => handleDelete(row)}
-              className="rounded-md border border-red-200 p-1.5 text-red-700 hover:bg-red-50"
-              title="حذف"
-            >
-              <Trash2 className="h-4 w-4" />
-            </button>
+            {canEdit && (
+              <button
+                onClick={() => openEditModal(row)}
+                className="rounded-md border border-slate-200 p-1.5 text-slate-700 hover:bg-slate-50"
+                title="تعديل"
+              >
+                <Pencil className="h-4 w-4" />
+              </button>
+            )}
+            {canDelete && (
+              <button
+                onClick={() => handleDelete(row)}
+                className="rounded-md border border-red-200 p-1.5 text-red-700 hover:bg-red-50"
+                title="حذف"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+            )}
           </div>
         ),
       },
     ],
-    []
+    [canEdit, canDelete]
   );
 
   /**
    * Opens create modal.
    */
   function openCreateModal() {
+    if (!canCreate) {
+      toast.error("ليس لديك صلاحية لإضافة شركة شحن");
+      return;
+    }
+
     setEditingId(null);
     setFormState(initialFormState);
     setIsModalOpen(true);
@@ -142,6 +160,10 @@ export function EnterpriseShippingCompaniesManager() {
    * Opens edit modal.
    */
   function openEditModal(row: ShippingCompanyRow) {
+    if (!canEdit) {
+      toast.error("ليس لديك صلاحية لتعديل شركات الشحن");
+      return;
+    }
     setEditingId(row.id);
     setFormState({
       company: row.company,
@@ -201,6 +223,11 @@ export function EnterpriseShippingCompaniesManager() {
    * Deletes company row.
    */
   function handleDelete(row: ShippingCompanyRow) {
+    if (!canDelete) {
+      toast.error("ليس لديك صلاحية لحذف شركات الشحن");
+      return;
+    }
+
     const confirmed = window.confirm("هل تريد حذف شركة الشحن؟");
     if (!confirmed) {
       return;
@@ -213,9 +240,11 @@ export function EnterpriseShippingCompaniesManager() {
   return (
     <section className="space-y-6" dir="rtl">
       <SectionHeader align="right" title="إدارة شركات الشحن" description="تحديث تكلفة الشحن الافتراضية المستخدمة في الطلبات.">
+      {canCreate && (
         <Button leftIcon={<Plus className="h-4 w-4" />} onClick={openCreateModal}>
           إضافة شركة شحن
         </Button>
+      )}
       </SectionHeader>
 
       <div className="grid gap-4 md:grid-cols-2">

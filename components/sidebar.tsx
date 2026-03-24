@@ -25,7 +25,8 @@ import {
   FileSpreadsheet,
   Undo2,
   KanbanSquare,
-  ListTodo
+  ListTodo,
+  Settings2
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -161,6 +162,7 @@ export const Sidebar = ({ isCollapsed, setIsCollapsed }: { isCollapsed: boolean;
         { icon: KanbanSquare, label: "الفرص البيعية", href: "/dashboard/crm-enterprise/opportunities" },
         { icon: Undo2, label: "المرتجعات", href: "/dashboard/crm-enterprise/returns" },
         { icon: ListTodo, label: "مهام الفرق", href: "/dashboard/crm-enterprise/tasks" },
+        { icon: Settings2, label: "الإعدادات العامة", href: "/dashboard/crm-enterprise/settings" },
       ],
     },
   ].filter(group => group.items.length > 0) : [];

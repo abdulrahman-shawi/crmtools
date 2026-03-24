@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import toast from "react-hot-toast";
+import { useAuth } from "@/context/AuthContext";
+import { can, RBAC_PERMISSIONS } from "@/lib/rbac";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { AppModal } from "@/components/ui/app-modal";
 import { Button } from "@/components/ui/button";
@@ -40,6 +42,7 @@ interface ReturnFormState {
   productId: string;
   productName: string;
   replacementNewProductName: string;
+  replacementReturnedProductName: string;
   returnedQuantity: string;
   reason: string;
   customer: string;
@@ -108,6 +111,7 @@ function createInitialFormState(): ReturnFormState {
     productId: "",
     productName: "",
     replacementNewProductName: "",
+    replacementReturnedProductName: "",
     returnedQuantity: "",
     reason: "",
     customer: "",
@@ -170,6 +174,14 @@ function toSearchText(row: ReturnRecord): string {
  * Manages CRM enterprise returns with dynamic workflow stages.
  */
 export function EnterpriseReturnsManager() {
+  const { user } = useAuth();
+
+  // Permission checks
+  const canView = can(user, RBAC_PERMISSIONS.returnsView);
+  const canCreate = can(user, RBAC_PERMISSIONS.returnsCreate);
+  const canEdit = can(user, RBAC_PERMISSIONS.returnsEdit);
+  const canDelete = can(user, RBAC_PERMISSIONS.returnsDelete);
+
   const [rows, setRows] = useState<ReturnRecord[]>(initialReturns);
   const [products, setProducts] = useState<ProductCatalogEntry[]>([]);
   const [page, setPage] = useState(1);
@@ -335,31 +347,40 @@ export function EnterpriseReturnsManager() {
         header: "الإجراءات",
         accessor: (row) => (
           <div className="flex items-center gap-1">
-            <button
-              onClick={() => openEditModal(row)}
-              className="rounded-md border border-slate-200 p-1.5 text-slate-700 hover:bg-slate-50"
-              title="تعديل"
-            >
-              <Pencil className="h-4 w-4" />
-            </button>
-            <button
-              onClick={() => handleDelete(row)}
-              className="rounded-md border border-red-200 p-1.5 text-red-700 hover:bg-red-50"
-              title="حذف"
-            >
-              <Trash2 className="h-4 w-4" />
-            </button>
+            {canEdit && (
+              <button
+                onClick={() => openEditModal(row)}
+                className="rounded-md border border-slate-200 p-1.5 text-slate-700 hover:bg-slate-50"
+                title="تعديل"
+              >
+                <Pencil className="h-4 w-4" />
+              </button>
+            )}
+            {canDelete && (
+              <button
+                onClick={() => handleDelete(row)}
+                className="rounded-md border border-red-200 p-1.5 text-red-700 hover:bg-red-50"
+                title="حذف"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+            )}
           </div>
         ),
       },
     ],
-    []
+    [canEdit, canDelete]
   );
 
   /**
    * Opens create modal and resets form state.
    */
   function openCreateModal() {
+    if (!canCreate) {
+      toast.error("ليس لديك صلاحية لإضافة مرتجع");
+      return;
+    }
+
     setEditingId(null);
     setFormState(createInitialFormState());
     setProductSearchQuery("");
@@ -373,12 +394,18 @@ export function EnterpriseReturnsManager() {
    * Opens edit modal and preloads selected row.
    */
   function openEditModal(row: ReturnRecord) {
+    if (!canEdit) {
+      toast.error("ليس لديك صلاحية لتعديل المرتجعات");
+      return;
+    }
+
     setEditingId(row.id);
     setFormState({
       returnType: row.returnType,
       productId: row.productId,
       productName: row.productName,
       replacementNewProductName: row.replacementNewProductName ?? "",
+      replacementReturnedProductName: row.replacementReturnedProductName ?? "",
       returnedQuantity: String(row.returnedQuantity),
       reason: row.reason,
       customer: row.customer,
@@ -495,6 +522,11 @@ export function EnterpriseReturnsManager() {
    * Deletes a selected return row after confirmation.
    */
   function handleDelete(row: ReturnRecord) {
+    if (!canDelete) {
+      toast.error("ليس لديك صلاحية لحذف المرتجعات");
+      return;
+    }
+
     const confirmed = window.confirm("هل تريد حذف هذا المرتجع؟");
     if (!confirmed) {
       return;
@@ -542,9 +574,11 @@ export function EnterpriseReturnsManager() {
         title="إدارة المرتجعات"
         description="نوع المرتجع، العميل، المنتج، الكمية، السبب ومراحل المعالجة. في التالف: اكتشاف الخطأ ثم تصليحه."
       >
-        <Button leftIcon={<Plus className="h-4 w-4" />} onClick={openCreateModal}>
-          إضافة مرتجع
-        </Button>
+        {canCreate && (
+          <Button leftIcon={<Plus className="h-4 w-4" />} onClick={openCreateModal}>
+            إضافة مرتجع
+          </Button>
+        )}
       </SectionHeader>
 
       <div className="grid gap-4 md:grid-cols-3">

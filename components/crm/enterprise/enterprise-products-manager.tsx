@@ -4,10 +4,13 @@ import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 import { Pencil, Plus, Trash2, Upload } from "lucide-react";
 import toast from "react-hot-toast";
 import { DataTable, type Column } from "@/components/shared/DataTable";
+import { useAuth } from "@/context/AuthContext";
+import { can, RBAC_PERMISSIONS } from "@/lib/rbac";
 import { AppModal } from "@/components/ui/app-modal";
 import { Button } from "@/components/ui/button";
 import DynamicCard from "@/components/ui/dynamicCard";
 import { SectionHeader } from "@/components/ui/section-header";
+import { isColumnVisible, isFieldRequired, readGeneralPageSettings, type GeneralPageRule } from "@/lib/crm-general-settings";
 
 type EntryType = "product" | "category";
 type DiscountType = "percentage" | "fixed";
@@ -246,6 +249,17 @@ export function EnterpriseProductsManager() {
   const [dateTo, setDateTo] = useState("");
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
   const [formState, setFormState] = useState<ProductFormState>(initialFormState);
+  const [pageSettings, setPageSettings] = useState<GeneralPageRule | null>(null);
+
+  useEffect(() => {
+    const settings = readGeneralPageSettings("products");
+    setPageSettings(settings);
+  }, []);
+
+  const { user } = useAuth();
+  const canCreate = can(user, RBAC_PERMISSIONS.productsCreate);
+  const canEdit   = can(user, RBAC_PERMISSIONS.productsEdit);
+  const canDelete = can(user, RBAC_PERMISSIONS.productsDelete);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -342,12 +356,15 @@ export function EnterpriseProductsManager() {
   }, [rows]);
 
   const columns = useMemo<Column<CatalogEntry>[]>(
-    () => [
+    () => {
+    const baseColumns: Array<Column<CatalogEntry> & { keyName: string }> = [
       {
+        keyName: "type",
         header: "النوع",
         accessor: (row) => (row.type === "product" ? "منتج" : "تصنيف"),
       },
       {
+        keyName: "name",
         header: "الاسم",
         accessor: (row) =>
           row.type === "product" ? (
@@ -363,6 +380,7 @@ export function EnterpriseProductsManager() {
           ),
       },
       {
+        keyName: "details",
         header: "التفاصيل",
         accessor: (row) =>
           row.type === "product"
@@ -370,22 +388,27 @@ export function EnterpriseProductsManager() {
             : `لون: ${row.categoryColor}`,
       },
       {
+        keyName: "createdAt",
         header: "التاريخ",
         accessor: (row) => row.createdAt,
       },
       {
+        keyName: "price",
         header: "السعر",
         accessor: (row) => (row.type === "product" ? row.price.toLocaleString() : "-"),
       },
       {
+        keyName: "quantity",
         header: "الكمية",
         accessor: (row) => (row.type === "product" ? row.quantity : "-"),
       },
       {
+        keyName: "categoryName",
         header: "التصنيف",
         accessor: (row) => (row.type === "product" ? row.categoryName || "-" : "-"),
       },
       {
+        keyName: "warehouse",
         header: "المستودع",
         accessor: (row) => {
           if (row.type === "category") {
@@ -396,34 +419,50 @@ export function EnterpriseProductsManager() {
         },
       },
       {
+        keyName: "actions",
         header: "الإجراءات",
         accessor: (row) => (
           <div className="flex items-center gap-1">
-            <button
-              onClick={() => openEditModal(row)}
-              className="rounded-md border border-slate-200 p-1.5 text-slate-700 hover:bg-slate-50"
-              title="تعديل"
-            >
-              <Pencil className="h-4 w-4" />
-            </button>
-            <button
-              onClick={() => handleDelete(row)}
-              className="rounded-md border border-red-200 p-1.5 text-red-700 hover:bg-red-50"
-              title="حذف"
-            >
-              <Trash2 className="h-4 w-4" />
-            </button>
+            {canEdit && (
+              <button
+                onClick={() => openEditModal(row)}
+                className="rounded-md border border-slate-200 p-1.5 text-slate-700 hover:bg-slate-50"
+                title="تعديل"
+              >
+                <Pencil className="h-4 w-4" />
+              </button>
+            )}
+            {canDelete && (
+              <button
+                onClick={() => handleDelete(row)}
+                className="rounded-md border border-red-200 p-1.5 text-red-700 hover:bg-red-50"
+                title="حذف"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+            )}
           </div>
         ),
       },
-    ],
-    [warehouses]
-  );
+    ];
+
+    if (!pageSettings) {
+      return baseColumns.map(({ keyName: _keyName, ...column }) => column);
+    }
+
+    return baseColumns
+      .filter((column) => column.keyName === "actions" || isColumnVisible(pageSettings, column.keyName))
+      .map(({ keyName: _keyName, ...column }) => column);
+  }, [warehouses, canEdit, canDelete, pageSettings]);
 
   /**
    * Opens create modal with fresh state.
    */
   function openCreateModal() {
+    if (!canCreate) {
+      toast.error("ليس لديك صلاحية لإضافة منتجات");
+      return;
+    }
     setEditingId(null);
     setFormState(initialFormState);
     setIsModalOpen(true);
@@ -433,6 +472,10 @@ export function EnterpriseProductsManager() {
    * Opens edit modal and maps existing row values to form state.
    */
   function openEditModal(row: CatalogEntry) {
+    if (!canEdit) {
+      toast.error("ليس لديك صلاحية لتعديل المنتجات");
+      return;
+    }
     if (row.type === "category") {
       setFormState({
         entryType: "category",
@@ -657,6 +700,26 @@ export function EnterpriseProductsManager() {
    */
   function handleSave() {
     if (formState.entryType === "category") {
+      const categoryChecks = [
+        {
+          key: "categoryName",
+          valid: Boolean(formState.categoryName.trim()),
+          message: "اسم التصنيف مطلوب",
+        },
+        {
+          key: "categoryWarehouseId",
+          valid: Boolean(formState.categoryWarehouseId),
+          message: "اختر مستودع التصنيف",
+        },
+      ];
+
+      for (const check of categoryChecks) {
+        if (isFieldRequired(pageSettings, check.key) && !check.valid) {
+          toast.error(check.message);
+          return;
+        }
+      }
+
       if (!formState.categoryName.trim()) {
         toast.error("اسم التصنيف مطلوب");
         return;
@@ -685,6 +748,26 @@ export function EnterpriseProductsManager() {
         toast.success("تمت إضافة التصنيف");
       }
     } else {
+      const productChecks = [
+        {
+          key: "productName",
+          valid: Boolean(formState.productName.trim()),
+          message: "اسم المنتج مطلوب",
+        },
+        {
+          key: "productCategoryName",
+          valid: Boolean(formState.productCategoryName.trim()),
+          message: "تصنيف المنتج مطلوب",
+        },
+      ];
+
+      for (const check of productChecks) {
+        if (isFieldRequired(pageSettings, check.key) && !check.valid) {
+          toast.error(check.message);
+          return;
+        }
+      }
+
       if (!formState.productName.trim()) {
         toast.error("اسم المنتج مطلوب");
         return;
@@ -758,6 +841,10 @@ export function EnterpriseProductsManager() {
    * Deletes a row after user confirmation.
    */
   function handleDelete(row: CatalogEntry) {
+    if (!canDelete) {
+      toast.error("ليس لديك صلاحية لحذف المنتجات");
+      return;
+    }
     const confirmed = window.confirm("هل تريد حذف هذا السجل؟");
     if (!confirmed) {
       return;
@@ -799,9 +886,11 @@ export function EnterpriseProductsManager() {
           >
             عرض التصنيفات
           </button>
-          <Button leftIcon={<Plus className="h-4 w-4" />} onClick={openCreateModal}>
-            إضافة منتج أو تصنيف
-          </Button>
+          {canCreate && (
+            <Button leftIcon={<Plus className="h-4 w-4" />} onClick={openCreateModal}>
+              إضافة منتج أو تصنيف
+            </Button>
+          )}
         </div>
       </SectionHeader>
 

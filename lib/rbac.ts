@@ -57,6 +57,23 @@ export const RBAC_PERMISSIONS = {
   tasksCreate: "tasks:create",
   tasksEdit: "tasks:edit",
   tasksDelete: "tasks:delete",
+
+  // CRM Customers
+  customersView: "customers:view",
+  customersCreate: "customers:create",
+  customersEdit: "customers:edit",
+  customersDelete: "customers:delete",
+
+  // CRM Orders
+  ordersView: "orders:view",
+  ordersEdit: "orders:edit",
+  ordersDelete: "orders:delete",
+
+  // CRM Products
+  productsView: "products:view",
+  productsCreate: "products:create",
+  productsEdit: "products:edit",
+  productsDelete: "products:delete",
 } as const;
 
 export type RbacPermission = (typeof RBAC_PERMISSIONS)[keyof typeof RBAC_PERMISSIONS];

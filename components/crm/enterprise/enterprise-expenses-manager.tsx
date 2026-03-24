@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Eye, Pencil, Plus, ShoppingCart, Trash2 } from "lucide-react";
 import toast from "react-hot-toast";
+import { useAuth } from "@/context/AuthContext";
+import { can, RBAC_PERMISSIONS } from "@/lib/rbac";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { AppModal } from "@/components/ui/app-modal";
 import { Button } from "@/components/ui/button";
@@ -395,6 +397,14 @@ function normalizeStoredExpenses(input: unknown[]): ExpenseRecord[] {
  * Expense manager with separate general/purchase tables and filters.
  */
 export function EnterpriseExpensesManager() {
+  const { user } = useAuth();
+
+  // Permission checks
+  const canView = can(user, RBAC_PERMISSIONS.expensesView);
+  const canCreate = can(user, RBAC_PERMISSIONS.expensesCreate);
+  const canEdit = can(user, RBAC_PERMISSIONS.expensesEdit);
+  const canDelete = can(user, RBAC_PERMISSIONS.expensesDelete);
+
   const [rows, setRows] = useState<ExpenseRecord[]>(initialExpenses);
   const [catalogProducts, setCatalogProducts] = useState<CatalogProduct[]>(fallbackProducts);
   const [shippingCompanies, setShippingCompanies] = useState<ShippingCompanyRow[]>(fallbackShippingCompanies);
@@ -522,25 +532,29 @@ export function EnterpriseExpensesManager() {
         header: "الإجراءات",
         accessor: (row) => (
           <div className="flex items-center gap-1">
-            <button
-              onClick={() => openEditModal(row)}
-              className="rounded-md border border-slate-200 p-1.5 text-slate-700 hover:bg-slate-50"
-              title="تعديل"
-            >
-              <Pencil className="h-4 w-4" />
-            </button>
-            <button
-              onClick={() => handleDelete(row)}
-              className="rounded-md border border-red-200 p-1.5 text-red-700 hover:bg-red-50"
-              title="حذف"
-            >
-              <Trash2 className="h-4 w-4" />
-            </button>
+            {canEdit && (
+              <button
+                onClick={() => openEditModal(row)}
+                className="rounded-md border border-slate-200 p-1.5 text-slate-700 hover:bg-slate-50"
+                title="تعديل"
+              >
+                <Pencil className="h-4 w-4" />
+              </button>
+            )}
+            {canDelete && (
+              <button
+                onClick={() => handleDelete(row)}
+                className="rounded-md border border-red-200 p-1.5 text-red-700 hover:bg-red-50"
+                title="حذف"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+            )}
           </div>
         ),
       },
     ],
-    []
+    [canEdit, canDelete]
   );
 
   const purchaseColumns = useMemo<Column<ExpenseRecord>[]>(
@@ -564,31 +578,40 @@ export function EnterpriseExpensesManager() {
             >
               <Eye className="h-4 w-4" />
             </button>
-            <button
-              onClick={() => openEditModal(row)}
-              className="rounded-md border border-slate-200 p-1.5 text-slate-700 hover:bg-slate-50"
-              title="تعديل"
-            >
-              <Pencil className="h-4 w-4" />
-            </button>
-            <button
-              onClick={() => handleDelete(row)}
-              className="rounded-md border border-red-200 p-1.5 text-red-700 hover:bg-red-50"
-              title="حذف"
-            >
-              <Trash2 className="h-4 w-4" />
-            </button>
+            {canEdit && (
+              <button
+                onClick={() => openEditModal(row)}
+                className="rounded-md border border-slate-200 p-1.5 text-slate-700 hover:bg-slate-50"
+                title="تعديل"
+              >
+                <Pencil className="h-4 w-4" />
+              </button>
+            )}
+            {canDelete && (
+              <button
+                onClick={() => handleDelete(row)}
+                className="rounded-md border border-red-200 p-1.5 text-red-700 hover:bg-red-50"
+                title="حذف"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+            )}
           </div>
         ),
       },
     ],
-    []
+    [canEdit, canDelete]
   );
 
   /**
    * Opens create modal with default state.
    */
   function openCreateModal() {
+    if (!canCreate) {
+      toast.error("ليس لديك صلاحية لإضافة مصروف");
+      return;
+    }
+
     setEditingId(null);
     setFormState(initialFormState);
     setIsModalOpen(true);
@@ -598,6 +621,10 @@ export function EnterpriseExpensesManager() {
    * Opens edit modal and maps selected row values.
    */
   function openEditModal(row: ExpenseRecord) {
+    if (!canEdit) {
+      toast.error("ليس لديك صلاحية لتعديل المصاريف");
+      return;
+    }
     if (row.type === "general") {
       setGeneralFilterVisible(true);
       setFormState({
@@ -820,6 +847,11 @@ export function EnterpriseExpensesManager() {
    * Deletes one expense row.
    */
   function handleDelete(row: ExpenseRecord) {
+    if (!canDelete) {
+      toast.error("ليس لديك صلاحية لحذف المصاريف");
+      return;
+    }
+
     const confirmed = window.confirm("هل تريد حذف هذا المصروف؟");
     if (!confirmed) {
       return;
@@ -836,9 +868,11 @@ export function EnterpriseExpensesManager() {
         title="إدارة المصاريف"
         description="جدول منفصل للمصاريف العامة وجدول منفصل لمصاريف شراء البضاعة."
       >
-        <Button leftIcon={<Plus className="h-4 w-4" />} onClick={openCreateModal}>
-          إضافة مصروف
-        </Button>
+        {canCreate && (
+          <Button leftIcon={<Plus className="h-4 w-4" />} onClick={openCreateModal}>
+            إضافة مصروف
+          </Button>
+        )}
       </SectionHeader>
 
       <div className="grid gap-4 md:grid-cols-3">

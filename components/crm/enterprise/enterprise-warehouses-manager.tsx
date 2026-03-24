@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import toast from "react-hot-toast";
+import { useAuth } from "@/context/AuthContext";
+import { can, RBAC_PERMISSIONS } from "@/lib/rbac";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { AppModal } from "@/components/ui/app-modal";
 import { Button } from "@/components/ui/button";
@@ -101,6 +103,13 @@ function toSearchText(row: WarehouseRecord): string {
  * Manages warehouses CRUD with local persistence.
  */
 export function EnterpriseWarehousesManager() {
+  const { user } = useAuth();
+
+  // Permission checks
+  const canCreate = can(user, RBAC_PERMISSIONS.warehousesCreate);
+  const canEdit = can(user, RBAC_PERMISSIONS.warehousesEdit);
+  const canDelete = can(user, RBAC_PERMISSIONS.warehousesDelete);
+
   const [rows, setRows] = useState<WarehouseRecord[]>(initialWarehouses);
   const [catalogRows, setCatalogRows] = useState<ProductCatalogForReport[]>([]);
   const [page, setPage] = useState(1);
@@ -231,31 +240,40 @@ export function EnterpriseWarehousesManager() {
         header: "الإجراءات",
         accessor: (row) => (
           <div className="flex items-center gap-1">
-            <button
-              onClick={() => openEditModal(row)}
-              className="rounded-md border border-slate-200 p-1.5 text-slate-700 hover:bg-slate-50"
-              title="تعديل"
-            >
-              <Pencil className="h-4 w-4" />
-            </button>
-            <button
-              onClick={() => handleDelete(row)}
-              className="rounded-md border border-red-200 p-1.5 text-red-700 hover:bg-red-50"
-              title="حذف"
-            >
-              <Trash2 className="h-4 w-4" />
-            </button>
+            {canEdit && (
+              <button
+                onClick={() => openEditModal(row)}
+                className="rounded-md border border-slate-200 p-1.5 text-slate-700 hover:bg-slate-50"
+                title="تعديل"
+              >
+                <Pencil className="h-4 w-4" />
+              </button>
+            )}
+            {canDelete && (
+              <button
+                onClick={() => handleDelete(row)}
+                className="rounded-md border border-red-200 p-1.5 text-red-700 hover:bg-red-50"
+                title="حذف"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+            )}
           </div>
         ),
       },
     ],
-    []
+    [canEdit, canDelete]
   );
 
   /**
    * Opens create modal with empty fields.
    */
   function openCreateModal() {
+    if (!canCreate) {
+      toast.error("ليس لديك صلاحية لإضافة مخزن");
+      return;
+    }
+
     setEditingId(null);
     setFormState(initialFormState);
     setIsModalOpen(true);
@@ -265,6 +283,10 @@ export function EnterpriseWarehousesManager() {
    * Opens edit modal with existing record data.
    */
   function openEditModal(row: WarehouseRecord) {
+    if (!canEdit) {
+      toast.error("ليس لديك صلاحية لتعديل المخازن");
+      return;
+    }
     setEditingId(row.id);
     setFormState({
       name: row.name,
@@ -308,6 +330,11 @@ export function EnterpriseWarehousesManager() {
    * Deletes warehouse record after confirmation.
    */
   function handleDelete(row: WarehouseRecord) {
+    if (!canDelete) {
+      toast.error("ليس لديك صلاحية لحذف المخازن");
+      return;
+    }
+
     const confirmed = window.confirm("هل تريد حذف هذا المخزن؟");
     if (!confirmed) {
       return;
@@ -324,9 +351,11 @@ export function EnterpriseWarehousesManager() {
         title="إدارة المستودعات"
         description="يمكنك إدارة المخازن وربطها بالمنتجات عبر بلد المخزن والملاحظات."
       >
-        <Button leftIcon={<Plus className="h-4 w-4" />} onClick={openCreateModal}>
-          إضافة مخزن
-        </Button>
+        {canCreate && (
+          <Button leftIcon={<Plus className="h-4 w-4" />} onClick={openCreateModal}>
+            إضافة مخزن
+          </Button>
+        )}
       </SectionHeader>
 
       <div className="grid gap-4 md:grid-cols-2">

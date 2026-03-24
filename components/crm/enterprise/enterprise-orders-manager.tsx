@@ -4,10 +4,13 @@ import { useEffect, useMemo, useState } from "react";
 import { Eye, MessageCircle, Pencil, Search, Share2, Trash2, Truck } from "lucide-react";
 import toast from "react-hot-toast";
 import { DataTable, type Column } from "@/components/shared/DataTable";
+import { useAuth } from "@/context/AuthContext";
+import { can, RBAC_PERMISSIONS } from "@/lib/rbac";
 import { AppModal } from "@/components/ui/app-modal";
 import { Button } from "@/components/ui/button";
 import DynamicCard from "@/components/ui/dynamicCard";
 import { SectionHeader } from "@/components/ui/section-header";
+import { isColumnVisible, isFieldRequired, readGeneralPageSettings, type GeneralPageRule } from "@/lib/crm-general-settings";
 
 interface PosLineItem {
   id: string;
@@ -134,6 +137,10 @@ export function EnterpriseOrdersManager() {
   const [editingOrderId, setEditingOrderId] = useState<string | null>(null);
   const [selectedShippingCompanyId, setSelectedShippingCompanyId] = useState("");
   const [shippingAmountInput, setShippingAmountInput] = useState("");
+
+    const { user } = useAuth();
+    const canEdit   = can(user, RBAC_PERMISSIONS.ordersEdit);
+    const canDelete = can(user, RBAC_PERMISSIONS.ordersDelete);
   const [editProductSearch, setEditProductSearch] = useState("");
   const [editItems, setEditItems] = useState<PosLineItem[]>([]);
   const [editDiscountAmount, setEditDiscountAmount] = useState("0");
@@ -145,6 +152,12 @@ export function EnterpriseOrdersManager() {
   const [editReceiverCity, setEditReceiverCity] = useState("");
   const [editReceivedAmount, setEditReceivedAmount] = useState("");
   const [editDeliveryNotes, setEditDeliveryNotes] = useState("");
+  const [pageSettings, setPageSettings] = useState<GeneralPageRule | null>(null);
+
+  useEffect(() => {
+    const settings = readGeneralPageSettings("orders");
+    setPageSettings(settings);
+  }, []);
 
   useEffect(() => {
     setOrders(readStorageArray<SalesOrder>(SALES_ORDERS_STORAGE_KEY));
@@ -251,15 +264,16 @@ export function EnterpriseOrdersManager() {
     return Math.max(0, editGrandTotal - editSafeReceivedAmount);
   }, [editGrandTotal, editPaymentMethod, editSafeReceivedAmount]);
 
-  const columns = useMemo<Column<SalesOrder>[]>(
-    () => [
-      { header: "رقم الطلب", accessor: "orderNo" },
-      { header: "رقم الفاتورة", accessor: "invoiceNo" },
-      { header: "العميل", accessor: "customerName" },
-      { header: "التاريخ", accessor: "date" },
-      { header: "المجموع", accessor: (row) => row.total.toLocaleString() },
-      { header: "الشحن", accessor: (row) => row.shippingCost.toLocaleString() },
+  const columns = useMemo<Column<SalesOrder>[]>(() => {
+    const baseColumns: Array<Column<SalesOrder> & { keyName: string }> = [
+      { keyName: "orderNo", header: "رقم الطلب", accessor: "orderNo" },
+      { keyName: "invoiceNo", header: "رقم الفاتورة", accessor: "invoiceNo" },
+      { keyName: "customerName", header: "العميل", accessor: "customerName" },
+      { keyName: "date", header: "التاريخ", accessor: "date" },
+      { keyName: "total", header: "المجموع", accessor: (row) => row.total.toLocaleString() },
+      { keyName: "shippingCost", header: "الشحن", accessor: (row) => row.shippingCost.toLocaleString() },
       {
+        keyName: "status",
         header: "الحالة",
         accessor: (row) => (
           <select
@@ -274,6 +288,7 @@ export function EnterpriseOrdersManager() {
         ),
       },
       {
+        keyName: "actions",
         header: "إجراءات",
         accessor: (row) => (
           <div className="flex flex-wrap items-center gap-2">
@@ -305,26 +320,37 @@ export function EnterpriseOrdersManager() {
             >
               <Truck className="h-3.5 w-3.5" /> تعيين شركة الشحن
             </button>
-            <button
-              type="button"
-              onClick={() => openEditOrderModal(row)}
-              className="inline-flex items-center gap-1 rounded-md border border-amber-200 px-2 py-1 text-xs text-amber-700 hover:bg-amber-50"
-            >
-              <Pencil className="h-3.5 w-3.5" /> تعديل
-            </button>
-            <button
-              type="button"
-              onClick={() => deleteOrder(row)}
-              className="inline-flex items-center gap-1 rounded-md border border-red-200 px-2 py-1 text-xs text-red-700 hover:bg-red-50"
-            >
-              <Trash2 className="h-3.5 w-3.5" /> حذف
-            </button>
+            {canEdit && (
+              <button
+                type="button"
+                onClick={() => openEditOrderModal(row)}
+                className="inline-flex items-center gap-1 rounded-md border border-amber-200 px-2 py-1 text-xs text-amber-700 hover:bg-amber-50"
+              >
+                <Pencil className="h-3.5 w-3.5" /> تعديل
+              </button>
+            )}
+            {canDelete && (
+              <button
+                type="button"
+                onClick={() => deleteOrder(row)}
+                className="inline-flex items-center gap-1 rounded-md border border-red-200 px-2 py-1 text-xs text-red-700 hover:bg-red-50"
+              >
+                <Trash2 className="h-3.5 w-3.5" /> حذف
+              </button>
+            )}
           </div>
         ),
       },
-    ],
-    [invoices]
-  );
+    ];
+
+    if (!pageSettings) {
+      return baseColumns.map(({ keyName: _keyName, ...column }) => column);
+    }
+
+    return baseColumns
+      .filter((column) => column.keyName === "actions" || isColumnVisible(pageSettings, column.keyName))
+      .map(({ keyName: _keyName, ...column }) => column);
+  }, [invoices, canDelete, canEdit, pageSettings]);
 
   /**
    * Builds details page URL for the invoice.
@@ -490,6 +516,10 @@ export function EnterpriseOrdersManager() {
    * Opens order edit modal and seeds form state.
    */
   function openEditOrderModal(order: SalesOrder) {
+    if (!canEdit) {
+      toast.error("ليس لديك صلاحية لتعديل الطلبات");
+      return;
+    }
     const linkedInvoice = invoices.find((invoice) => invoice.id === order.invoiceId) ?? null;
 
     setEditingOrderId(order.id);
@@ -522,6 +552,36 @@ export function EnterpriseOrdersManager() {
     if (!editReceiverName.trim() || !editReceiverPhone.trim() || !editReceiverCity.trim()) {
       toast.error("يرجى تعبئة اسم المستلم ورقمه ومدينة الاستلام");
       return;
+    }
+
+    const requiredChecks = [
+      {
+        key: "receiverName",
+        valid: Boolean(editReceiverName.trim()),
+        message: "اسم المستلم مطلوب",
+      },
+      {
+        key: "receiverPhone",
+        valid: Boolean(editReceiverPhone.trim()),
+        message: "رقم المستلم مطلوب",
+      },
+      {
+        key: "receiverCity",
+        valid: Boolean(editReceiverCity.trim()),
+        message: "مدينة المستلم مطلوبة",
+      },
+      {
+        key: "deliveryNotes",
+        valid: Boolean(editDeliveryNotes.trim()),
+        message: "ملاحظات التوصيل مطلوبة",
+      },
+    ];
+
+    for (const check of requiredChecks) {
+      if (isFieldRequired(pageSettings, check.key) && !check.valid) {
+        toast.error(check.message);
+        return;
+      }
     }
 
     if (editPaymentMethod === "other" && editSafeReceivedAmount <= 0) {
@@ -647,6 +707,10 @@ export function EnterpriseOrdersManager() {
    * Deletes one order row from table and storage.
    */
   function deleteOrder(order: SalesOrder) {
+    if (!canDelete) {
+      toast.error("ليس لديك صلاحية لحذف الطلبات");
+      return;
+    }
     const confirmed = window.confirm(`هل تريد حذف الطلب ${order.orderNo}؟`);
     if (!confirmed) {
       return;

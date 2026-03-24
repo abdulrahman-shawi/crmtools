@@ -5,6 +5,8 @@ import { useEffect, useMemo, useState } from "react";
 import { MessageSquareText, Pencil, Plus, ReceiptText, Search, Share2, Trash2 } from "lucide-react";
 import toast from "react-hot-toast";
 import PhoneInput from "react-phone-number-input/input";
+import { useAuth } from "@/context/AuthContext";
+import { can, RBAC_PERMISSIONS } from "@/lib/rbac";
 import { getCountryCallingCode } from "react-phone-number-input";
 import type { CountryCode } from "libphonenumber-js/core";
 import { DataTable, type Column } from "@/components/shared/DataTable";
@@ -12,6 +14,7 @@ import { AppModal } from "@/components/ui/app-modal";
 import { Button } from "@/components/ui/button";
 import DynamicCard from "@/components/ui/dynamicCard";
 import { SectionHeader } from "@/components/ui/section-header";
+import { isColumnVisible, isFieldRequired, readGeneralPageSettings, type GeneralPageRule } from "@/lib/crm-general-settings";
 
 interface EnterpriseCustomer {
   id: string;
@@ -559,6 +562,11 @@ export function EnterpriseCustomersManager() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formState, setFormState] = useState<CustomerFormState>(initialFormState);
   const [isCommunicationModalOpen, setIsCommunicationModalOpen] = useState(false);
+
+    const { user } = useAuth();
+    const canCreate = can(user, RBAC_PERMISSIONS.customersCreate);
+    const canEdit   = can(user, RBAC_PERMISSIONS.customersEdit);
+    const canDelete = can(user, RBAC_PERMISSIONS.customersDelete);
   const [activeCustomerId, setActiveCustomerId] = useState<string | null>(null);
   const [communicationFormState, setCommunicationFormState] = useState<CommunicationFormState>(initialCommunicationFormState);
   const [communicationsByCustomer, setCommunicationsByCustomer] = useState<Record<string, CustomerCommunication[]>>(
@@ -582,6 +590,12 @@ export function EnterpriseCustomersManager() {
   const [isCustomerHistoryModalOpen, setIsCustomerHistoryModalOpen] = useState(false);
   const [historyCustomerId, setHistoryCustomerId] = useState<string | null>(null);
   const [previewInvoiceId, setPreviewInvoiceId] = useState<string | null>(null);
+  const [pageSettings, setPageSettings] = useState<GeneralPageRule | null>(null);
+
+  useEffect(() => {
+    const settings = readGeneralPageSettings("customers");
+    setPageSettings(settings);
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -747,9 +761,10 @@ export function EnterpriseCustomersManager() {
     return { totalCustomers, activeCustomers, annualRevenue };
   }, [customers]);
 
-  const columns = useMemo<Column<EnterpriseCustomer>[]>(
-    () => [
+  const columns = useMemo<Column<EnterpriseCustomer>[]>(() => {
+    const baseColumns: Array<Column<EnterpriseCustomer> & { keyName: string }> = [
       {
+        keyName: "companyName",
         header: "الشركة",
         accessor: (row) => (
           <button
@@ -762,35 +777,40 @@ export function EnterpriseCustomersManager() {
           </button>
         ),
       },
-      { header: "الحجم", accessor: (row) => sizeLabel[row.companySize] },
-      { header: "القطاع", accessor: "industry" },
+      { keyName: "companySize", header: "الحجم", accessor: (row) => sizeLabel[row.companySize] },
+      { keyName: "industry", header: "القطاع", accessor: "industry" },
       {
+        keyName: "contactPersons",
         header: "مسؤول التواصل",
         accessor: (row) => row.contactPersons.join("، "),
       },
       {
+        keyName: "country",
         header: "البلد",
         accessor: (row) => countryOptions.find((country) => country.code === row.country)?.label ?? row.country,
       },
-      { header: "المدينة", accessor: "city" },
-      { header: "رقم التواصل", accessor: "phone" },
+      { keyName: "city", header: "المدينة", accessor: "city" },
+      { keyName: "phone", header: "رقم التواصل", accessor: "phone" },
       {
+        keyName: "status",
         header: "الحالة",
         accessor: (row) => {
           const status = statusLabel[row.status];
           return <span className={`inline-block rounded-full px-3 py-1 text-xs font-semibold ${status.color}`}>{status.label}</span>;
         },
       },
-      { header: "آخر تواصل", accessor: (row) => row.lastCommunication || "-" },
+      { keyName: "lastCommunication", header: "آخر تواصل", accessor: (row) => row.lastCommunication || "-" },
       {
+        keyName: "tier",
         header: "التصنيف",
         accessor: (row) => {
           const tier = tierLabel[row.tier];
           return <span className={`inline-block rounded-full px-3 py-1 text-xs font-semibold ${tier.color}`}>{tier.label}</span>;
         },
       },
-      { header: "القيمة السنوية", accessor: (row) => row.annualValue.toLocaleString() },
+      { keyName: "annualValue", header: "القيمة السنوية", accessor: (row) => row.annualValue.toLocaleString() },
       {
+        keyName: "actions",
         header: "الإجراءات",
         accessor: (row) => (
           <div className="flex items-center gap-1">
@@ -808,31 +828,46 @@ export function EnterpriseCustomersManager() {
             >
               <MessageSquareText className="h-4 w-4" />
             </button>
-            <button
-              onClick={() => openEditModal(row)}
-              className="rounded-md border border-slate-200 p-1.5 text-slate-700 hover:bg-slate-50"
-              title="تعديل"
-            >
-              <Pencil className="h-4 w-4" />
-            </button>
-            <button
-              onClick={() => handleDelete(row)}
-              className="rounded-md border border-red-200 p-1.5 text-red-700 hover:bg-red-50"
-              title="حذف"
-            >
-              <Trash2 className="h-4 w-4" />
-            </button>
+            {canEdit && (
+              <button
+                onClick={() => openEditModal(row)}
+                className="rounded-md border border-slate-200 p-1.5 text-slate-700 hover:bg-slate-50"
+                title="تعديل"
+              >
+                <Pencil className="h-4 w-4" />
+              </button>
+            )}
+            {canDelete && (
+              <button
+                onClick={() => handleDelete(row)}
+                className="rounded-md border border-red-200 p-1.5 text-red-700 hover:bg-red-50"
+                title="حذف"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+            )}
           </div>
         ),
       },
-    ],
-    []
-  );
+    ];
+
+    if (!pageSettings) {
+      return baseColumns.map(({ keyName: _keyName, ...column }) => column);
+    }
+
+    return baseColumns
+      .filter((column) => column.keyName === "actions" || isColumnVisible(pageSettings, column.keyName))
+      .map(({ keyName: _keyName, ...column }) => column);
+  }, [canEdit, canDelete, pageSettings]);
 
   /**
    * يفتح نافذة إنشاء عميل جديد.
    */
   function openCreateModal() {
+    if (!canCreate) {
+      toast.error("ليس لديك صلاحية لإضافة عملاء");
+      return;
+    }
     setEditingId(null);
     setFormState(initialFormState);
     setIsModalOpen(true);
@@ -842,6 +877,10 @@ export function EnterpriseCustomersManager() {
    * يفتح نافذة التعديل بناءً على بيانات العميل المحدد.
    */
   function openEditModal(customer: EnterpriseCustomer) {
+    if (!canEdit) {
+      toast.error("ليس لديك صلاحية لتعديل العملاء");
+      return;
+    }
     setEditingId(customer.id);
     setFormState({
       companyName: customer.companyName,
@@ -1125,6 +1164,51 @@ export function EnterpriseCustomersManager() {
    * يحفظ العميل الجديد أو تحديث العميل الحالي.
    */
   function handleSave() {
+    const requiredChecks = [
+      {
+        key: "companyName",
+        valid: Boolean(formState.companyName.trim()),
+        message: "اسم الشركة مطلوب",
+      },
+      {
+        key: "contactPersons",
+        valid: formState.contactPersons.length > 0,
+        message: "مسؤول التواصل مطلوب",
+      },
+      {
+        key: "country",
+        valid: Boolean(formState.country),
+        message: "البلد مطلوب",
+      },
+      {
+        key: "city",
+        valid: Boolean(formState.city.trim()),
+        message: "المدينة مطلوبة",
+      },
+      {
+        key: "phone",
+        valid: Boolean(formState.phone.trim()),
+        message: "رقم التواصل مطلوب",
+      },
+      {
+        key: "industry",
+        valid: Boolean(formState.industry.trim()),
+        message: "القطاع مطلوب",
+      },
+      {
+        key: "email",
+        valid: Boolean(formState.email.trim()),
+        message: "البريد الإلكتروني مطلوب",
+      },
+    ];
+
+    for (const check of requiredChecks) {
+      if (isFieldRequired(pageSettings, check.key) && !check.valid) {
+        toast.error(check.message);
+        return;
+      }
+    }
+
     if (
       !formState.companyName.trim() ||
       formState.contactPersons.length === 0 ||
@@ -1223,6 +1307,10 @@ export function EnterpriseCustomersManager() {
    * يحذف العميل بعد تأكيد المستخدم.
    */
   function handleDelete(customer: EnterpriseCustomer) {
+    if (!canDelete) {
+      toast.error("ليس لديك صلاحية لحذف العملاء");
+      return;
+    }
     const confirmed = window.confirm(`هل تريد حذف ${customer.companyName}؟`);
     if (!confirmed) {
       return;
@@ -1246,9 +1334,11 @@ export function EnterpriseCustomersManager() {
         title="إضافة العملاء - CRM Enterprise"
         description="إدارة عملاء الشركات المتوسطة والكبيرة مع متابعة الحالة والقيمة السنوية."
       >
-        <Button leftIcon={<Plus className="h-4 w-4" />} onClick={openCreateModal}>
-          إضافة عميل
-        </Button>
+        {canCreate && (
+          <Button leftIcon={<Plus className="h-4 w-4" />} onClick={openCreateModal}>
+            إضافة عميل
+          </Button>
+        )}
       </SectionHeader>
 
       <div className="grid gap-4 md:grid-cols-3">

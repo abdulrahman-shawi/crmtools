@@ -86,6 +86,20 @@ const defaultUser: AppUser = {
     "tasks:create",
     "tasks:edit",
     "tasks:delete",
+    // CRM Customers
+    "customers:view",
+    "customers:create",
+    "customers:edit",
+    "customers:delete",
+    // CRM Orders
+    "orders:view",
+    "orders:edit",
+    "orders:delete",
+    // CRM Products
+    "products:view",
+    "products:create",
+    "products:edit",
+    "products:delete",
   ],
 };
 

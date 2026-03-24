@@ -108,6 +108,24 @@ const allSystemPermissions: TeamPermissionOption[] = [
   { key: RBAC_PERMISSIONS.tasksDelete, label: "حذف المهام", group: "المهام" },
 
   { key: RBAC_PERMISSIONS.dataSearch, label: "البحث في البيانات", group: "System" },
+    // CRM Customers
+    { key: RBAC_PERMISSIONS.customersView, label: "عرض العملاء", group: "CRM" },
+    { key: RBAC_PERMISSIONS.customersCreate, label: "إضافة عميل", group: "CRM" },
+    { key: RBAC_PERMISSIONS.customersEdit, label: "تعديل عميل", group: "CRM" },
+    { key: RBAC_PERMISSIONS.customersDelete, label: "حذف عميل", group: "CRM" },
+
+    // CRM Orders
+    { key: RBAC_PERMISSIONS.ordersView, label: "عرض الطلبات", group: "CRM" },
+    { key: RBAC_PERMISSIONS.ordersEdit, label: "تعديل طلب", group: "CRM" },
+    { key: RBAC_PERMISSIONS.ordersDelete, label: "حذف طلب", group: "CRM" },
+
+    // CRM Products
+    { key: RBAC_PERMISSIONS.productsView, label: "عرض المنتجات", group: "المنتجات" },
+    { key: RBAC_PERMISSIONS.productsCreate, label: "إضافة منتج", group: "المنتجات" },
+    { key: RBAC_PERMISSIONS.productsEdit, label: "تعديل منتج", group: "المنتجات" },
+    { key: RBAC_PERMISSIONS.productsDelete, label: "حذف منتج", group: "المنتجات" },
+
+    { key: RBAC_PERMISSIONS.dataSearch, label: "البحث في البيانات", group: "System" },
   { key: RBAC_PERMISSIONS.dataExport, label: "تصدير البيانات", group: "System" },
   { key: RBAC_PERMISSIONS.dataImport, label: "استيراد البيانات", group: "System" },
 ];
