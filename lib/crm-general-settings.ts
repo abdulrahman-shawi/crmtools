@@ -142,3 +142,19 @@ export function isFieldRequired(page: GeneralPageRule | null, fieldKey: string):
 export function isColumnVisible(page: GeneralPageRule | null, columnKey: string): boolean {
   return Boolean(page?.tableColumns?.some((column) => column.key === columnKey && column.isVisible));
 }
+
+/**
+ * Resolves a field label from settings with a fallback label.
+ */
+export function getFieldLabel(page: GeneralPageRule | null, fieldKey: string, fallbackLabel: string): string {
+  const field = page?.fields?.find((item) => item.key === fieldKey);
+  return field?.label?.trim() || fallbackLabel;
+}
+
+/**
+ * Resolves a table column label from settings with a fallback label.
+ */
+export function getColumnLabel(page: GeneralPageRule | null, columnKey: string, fallbackLabel: string): string {
+  const column = page?.tableColumns?.find((item) => item.key === columnKey);
+  return column?.label?.trim() || fallbackLabel;
+}

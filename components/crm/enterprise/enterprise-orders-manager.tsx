@@ -10,7 +10,15 @@ import { AppModal } from "@/components/ui/app-modal";
 import { Button } from "@/components/ui/button";
 import DynamicCard from "@/components/ui/dynamicCard";
 import { SectionHeader } from "@/components/ui/section-header";
-import { isColumnVisible, isFieldRequired, readGeneralPageSettings, type GeneralPageRule } from "@/lib/crm-general-settings";
+import {
+  GENERAL_SETTINGS_UPDATED_EVENT,
+  getColumnLabel,
+  getFieldLabel,
+  isColumnVisible,
+  isFieldRequired,
+  readGeneralPageSettings,
+  type GeneralPageRule,
+} from "@/lib/crm-general-settings";
 
 interface PosLineItem {
   id: string;
@@ -155,8 +163,19 @@ export function EnterpriseOrdersManager() {
   const [pageSettings, setPageSettings] = useState<GeneralPageRule | null>(null);
 
   useEffect(() => {
-    const settings = readGeneralPageSettings("orders");
-    setPageSettings(settings);
+    const applySettings = () => {
+      const settings = readGeneralPageSettings("orders");
+      setPageSettings(settings);
+    };
+
+    applySettings();
+    window.addEventListener("storage", applySettings);
+    window.addEventListener(GENERAL_SETTINGS_UPDATED_EVENT, applySettings);
+
+    return () => {
+      window.removeEventListener("storage", applySettings);
+      window.removeEventListener(GENERAL_SETTINGS_UPDATED_EVENT, applySettings);
+    };
   }, []);
 
   useEffect(() => {
@@ -266,15 +285,15 @@ export function EnterpriseOrdersManager() {
 
   const columns = useMemo<Column<SalesOrder>[]>(() => {
     const baseColumns: Array<Column<SalesOrder> & { keyName: string }> = [
-      { keyName: "orderNo", header: "رقم الطلب", accessor: "orderNo" },
-      { keyName: "invoiceNo", header: "رقم الفاتورة", accessor: "invoiceNo" },
-      { keyName: "customerName", header: "العميل", accessor: "customerName" },
-      { keyName: "date", header: "التاريخ", accessor: "date" },
-      { keyName: "total", header: "المجموع", accessor: (row) => row.total.toLocaleString() },
-      { keyName: "shippingCost", header: "الشحن", accessor: (row) => row.shippingCost.toLocaleString() },
+      { keyName: "orderNo", header: getColumnLabel(pageSettings, "orderNo", "رقم الطلب"), accessor: "orderNo" },
+      { keyName: "invoiceNo", header: getColumnLabel(pageSettings, "invoiceNo", "رقم الفاتورة"), accessor: "invoiceNo" },
+      { keyName: "customerName", header: getColumnLabel(pageSettings, "customerName", "العميل"), accessor: "customerName" },
+      { keyName: "date", header: getColumnLabel(pageSettings, "date", "التاريخ"), accessor: "date" },
+      { keyName: "total", header: getColumnLabel(pageSettings, "total", "المجموع"), accessor: (row) => row.total.toLocaleString() },
+      { keyName: "shippingCost", header: getColumnLabel(pageSettings, "shippingCost", "الشحن"), accessor: (row) => row.shippingCost.toLocaleString() },
       {
         keyName: "status",
-        header: "الحالة",
+        header: getColumnLabel(pageSettings, "status", "الحالة"),
         accessor: (row) => (
           <select
             className="h-8 rounded-md border border-slate-200 px-2 text-xs"
@@ -984,19 +1003,19 @@ export function EnterpriseOrdersManager() {
             <div className="grid grid-cols-1 gap-2 rounded-lg border border-slate-200 bg-white p-3 md:grid-cols-2">
               <input
                 className="h-9 rounded-lg border border-slate-200 px-2 text-sm"
-                placeholder="اسم المستلم"
+                placeholder={getFieldLabel(pageSettings, "receiverName", "اسم المستلم")}
                 value={editReceiverName}
                 onChange={(event) => setEditReceiverName(event.target.value)}
               />
               <input
                 className="h-9 rounded-lg border border-slate-200 px-2 text-sm"
-                placeholder="رقم المستلم"
+                placeholder={getFieldLabel(pageSettings, "receiverPhone", "رقم المستلم")}
                 value={editReceiverPhone}
                 onChange={(event) => setEditReceiverPhone(event.target.value)}
               />
               <input
                 className="h-9 rounded-lg border border-slate-200 px-2 text-sm md:col-span-2"
-                placeholder="مدينة الاستلام"
+                placeholder={getFieldLabel(pageSettings, "receiverCity", "مدينة الاستلام")}
                 value={editReceiverCity}
                 onChange={(event) => setEditReceiverCity(event.target.value)}
               />
@@ -1132,7 +1151,7 @@ export function EnterpriseOrdersManager() {
 
             <textarea
               className="min-h-[80px] rounded-lg border border-slate-200 px-3 py-2 text-sm"
-              placeholder="ملاحظات التسليم"
+              placeholder={getFieldLabel(pageSettings, "deliveryNotes", "ملاحظات التسليم")}
               value={editDeliveryNotes}
               onChange={(event) => setEditDeliveryNotes(event.target.value)}
             />

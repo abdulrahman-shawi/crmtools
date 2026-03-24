@@ -10,7 +10,15 @@ import { AppModal } from "@/components/ui/app-modal";
 import { Button } from "@/components/ui/button";
 import DynamicCard from "@/components/ui/dynamicCard";
 import { SectionHeader } from "@/components/ui/section-header";
-import { isColumnVisible, isFieldRequired, readGeneralPageSettings, type GeneralPageRule } from "@/lib/crm-general-settings";
+import {
+  GENERAL_SETTINGS_UPDATED_EVENT,
+  getColumnLabel,
+  getFieldLabel,
+  isColumnVisible,
+  isFieldRequired,
+  readGeneralPageSettings,
+  type GeneralPageRule,
+} from "@/lib/crm-general-settings";
 
 type EntryType = "product" | "category";
 type DiscountType = "percentage" | "fixed";
@@ -252,8 +260,19 @@ export function EnterpriseProductsManager() {
   const [pageSettings, setPageSettings] = useState<GeneralPageRule | null>(null);
 
   useEffect(() => {
-    const settings = readGeneralPageSettings("products");
-    setPageSettings(settings);
+    const applySettings = () => {
+      const settings = readGeneralPageSettings("products");
+      setPageSettings(settings);
+    };
+
+    applySettings();
+    window.addEventListener("storage", applySettings);
+    window.addEventListener(GENERAL_SETTINGS_UPDATED_EVENT, applySettings);
+
+    return () => {
+      window.removeEventListener("storage", applySettings);
+      window.removeEventListener(GENERAL_SETTINGS_UPDATED_EVENT, applySettings);
+    };
   }, []);
 
   const { user } = useAuth();
@@ -360,12 +379,12 @@ export function EnterpriseProductsManager() {
     const baseColumns: Array<Column<CatalogEntry> & { keyName: string }> = [
       {
         keyName: "type",
-        header: "النوع",
+        header: getColumnLabel(pageSettings, "type", "النوع"),
         accessor: (row) => (row.type === "product" ? "منتج" : "تصنيف"),
       },
       {
         keyName: "name",
-        header: "الاسم",
+        header: getColumnLabel(pageSettings, "name", "الاسم"),
         accessor: (row) =>
           row.type === "product" ? (
             <button
@@ -381,7 +400,7 @@ export function EnterpriseProductsManager() {
       },
       {
         keyName: "details",
-        header: "التفاصيل",
+        header: getColumnLabel(pageSettings, "details", "التفاصيل"),
         accessor: (row) =>
           row.type === "product"
             ? `ألوان: ${row.colors.length} | قياسات: ${row.sizes.length} | مخازن: ${row.warehouseAllocations.length}`
@@ -389,27 +408,27 @@ export function EnterpriseProductsManager() {
       },
       {
         keyName: "createdAt",
-        header: "التاريخ",
+        header: getColumnLabel(pageSettings, "createdAt", "التاريخ"),
         accessor: (row) => row.createdAt,
       },
       {
         keyName: "price",
-        header: "السعر",
+        header: getColumnLabel(pageSettings, "price", "السعر"),
         accessor: (row) => (row.type === "product" ? row.price.toLocaleString() : "-"),
       },
       {
         keyName: "quantity",
-        header: "الكمية",
+        header: getColumnLabel(pageSettings, "quantity", "الكمية"),
         accessor: (row) => (row.type === "product" ? row.quantity : "-"),
       },
       {
         keyName: "categoryName",
-        header: "التصنيف",
+        header: getColumnLabel(pageSettings, "categoryName", "التصنيف"),
         accessor: (row) => (row.type === "product" ? row.categoryName || "-" : "-"),
       },
       {
         keyName: "warehouse",
-        header: "المستودع",
+        header: getColumnLabel(pageSettings, "warehouse", "المستودع"),
         accessor: (row) => {
           if (row.type === "category") {
             return warehouses.find((warehouse) => warehouse.id === row.categoryWarehouseId)?.name ?? "-";
@@ -1012,7 +1031,7 @@ export function EnterpriseProductsManager() {
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               <input
                 className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
-                placeholder="اسم التصنيف"
+                placeholder={getFieldLabel(pageSettings, "categoryName", "اسم التصنيف")}
                 value={formState.categoryName}
                 onChange={(event) => setFormState((prev) => ({ ...prev, categoryName: event.target.value }))}
               />
@@ -1048,7 +1067,7 @@ export function EnterpriseProductsManager() {
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               <input
                 className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
-                placeholder="اسم المنتج"
+                placeholder={getFieldLabel(pageSettings, "productName", "اسم المنتج")}
                 value={formState.productName}
                 onChange={(event) => setFormState((prev) => ({ ...prev, productName: event.target.value }))}
               />

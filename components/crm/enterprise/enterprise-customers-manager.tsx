@@ -14,7 +14,15 @@ import { AppModal } from "@/components/ui/app-modal";
 import { Button } from "@/components/ui/button";
 import DynamicCard from "@/components/ui/dynamicCard";
 import { SectionHeader } from "@/components/ui/section-header";
-import { isColumnVisible, isFieldRequired, readGeneralPageSettings, type GeneralPageRule } from "@/lib/crm-general-settings";
+import {
+  GENERAL_SETTINGS_UPDATED_EVENT,
+  getColumnLabel,
+  getFieldLabel,
+  isColumnVisible,
+  isFieldRequired,
+  readGeneralPageSettings,
+  type GeneralPageRule,
+} from "@/lib/crm-general-settings";
 
 interface EnterpriseCustomer {
   id: string;
@@ -593,8 +601,19 @@ export function EnterpriseCustomersManager() {
   const [pageSettings, setPageSettings] = useState<GeneralPageRule | null>(null);
 
   useEffect(() => {
-    const settings = readGeneralPageSettings("customers");
-    setPageSettings(settings);
+    const applySettings = () => {
+      const settings = readGeneralPageSettings("customers");
+      setPageSettings(settings);
+    };
+
+    applySettings();
+    window.addEventListener("storage", applySettings);
+    window.addEventListener(GENERAL_SETTINGS_UPDATED_EVENT, applySettings);
+
+    return () => {
+      window.removeEventListener("storage", applySettings);
+      window.removeEventListener(GENERAL_SETTINGS_UPDATED_EVENT, applySettings);
+    };
   }, []);
 
   useEffect(() => {
@@ -765,7 +784,7 @@ export function EnterpriseCustomersManager() {
     const baseColumns: Array<Column<EnterpriseCustomer> & { keyName: string }> = [
       {
         keyName: "companyName",
-        header: "الشركة",
+        header: getColumnLabel(pageSettings, "companyName", "الشركة"),
         accessor: (row) => (
           <button
             type="button"
@@ -777,38 +796,38 @@ export function EnterpriseCustomersManager() {
           </button>
         ),
       },
-      { keyName: "companySize", header: "الحجم", accessor: (row) => sizeLabel[row.companySize] },
-      { keyName: "industry", header: "القطاع", accessor: "industry" },
+      { keyName: "companySize", header: getColumnLabel(pageSettings, "companySize", "الحجم"), accessor: (row) => sizeLabel[row.companySize] },
+      { keyName: "industry", header: getColumnLabel(pageSettings, "industry", "القطاع"), accessor: "industry" },
       {
         keyName: "contactPersons",
-        header: "مسؤول التواصل",
+        header: getColumnLabel(pageSettings, "contactPersons", "مسؤول التواصل"),
         accessor: (row) => row.contactPersons.join("، "),
       },
       {
         keyName: "country",
-        header: "البلد",
+        header: getColumnLabel(pageSettings, "country", "البلد"),
         accessor: (row) => countryOptions.find((country) => country.code === row.country)?.label ?? row.country,
       },
-      { keyName: "city", header: "المدينة", accessor: "city" },
-      { keyName: "phone", header: "رقم التواصل", accessor: "phone" },
+      { keyName: "city", header: getColumnLabel(pageSettings, "city", "المدينة"), accessor: "city" },
+      { keyName: "phone", header: getColumnLabel(pageSettings, "phone", "رقم التواصل"), accessor: "phone" },
       {
         keyName: "status",
-        header: "الحالة",
+        header: getColumnLabel(pageSettings, "status", "الحالة"),
         accessor: (row) => {
           const status = statusLabel[row.status];
           return <span className={`inline-block rounded-full px-3 py-1 text-xs font-semibold ${status.color}`}>{status.label}</span>;
         },
       },
-      { keyName: "lastCommunication", header: "آخر تواصل", accessor: (row) => row.lastCommunication || "-" },
+      { keyName: "lastCommunication", header: getColumnLabel(pageSettings, "lastCommunication", "آخر تواصل"), accessor: (row) => row.lastCommunication || "-" },
       {
         keyName: "tier",
-        header: "التصنيف",
+        header: getColumnLabel(pageSettings, "tier", "التصنيف"),
         accessor: (row) => {
           const tier = tierLabel[row.tier];
           return <span className={`inline-block rounded-full px-3 py-1 text-xs font-semibold ${tier.color}`}>{tier.label}</span>;
         },
       },
-      { keyName: "annualValue", header: "القيمة السنوية", accessor: (row) => row.annualValue.toLocaleString() },
+      { keyName: "annualValue", header: getColumnLabel(pageSettings, "annualValue", "القيمة السنوية"), accessor: (row) => row.annualValue.toLocaleString() },
       {
         keyName: "actions",
         header: "الإجراءات",
@@ -1400,7 +1419,7 @@ export function EnterpriseCustomersManager() {
       <AppModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={editingId ? "تعديل عميل" : "إضافة عميل"}
+        title={editingId ? `تعديل ${getFieldLabel(pageSettings, "companyName", "عميل")}` : `إضافة ${getFieldLabel(pageSettings, "companyName", "عميل")}`}
         size="md"
         footer={
           <>
@@ -1414,7 +1433,7 @@ export function EnterpriseCustomersManager() {
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           <input
             className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
-            placeholder="اسم الشركة"
+            placeholder={getFieldLabel(pageSettings, "companyName", "اسم الشركة")}
             value={formState.companyName}
             onChange={(event) => setFormState((prev) => ({ ...prev, companyName: event.target.value }))}
           />
@@ -1430,12 +1449,12 @@ export function EnterpriseCustomersManager() {
           </select>
           <input
             className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
-            placeholder="القطاع"
+            placeholder={getFieldLabel(pageSettings, "industry", "القطاع")}
             value={formState.industry}
             onChange={(event) => setFormState((prev) => ({ ...prev, industry: event.target.value }))}
           />
           <div className="space-y-2 rounded-lg border border-slate-200 p-3 md:col-span-2">
-            <p className="text-xs text-slate-600">مسؤول التواصل (Checkbox - يمكن اختيار أكثر من مسؤول)</p>
+            <p className="text-xs text-slate-600">{getFieldLabel(pageSettings, "contactPersons", "مسؤول التواصل")} (Checkbox - يمكن اختيار أكثر من مسؤول)</p>
             <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
               {contactOwnerOptions.map((owner) => (
                 <label key={owner} className="flex items-center gap-2 text-sm text-slate-700">
@@ -1463,12 +1482,12 @@ export function EnterpriseCustomersManager() {
           </select>
           <input
             className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
-            placeholder="المدينة"
+            placeholder={getFieldLabel(pageSettings, "city", "المدينة")}
             value={formState.city}
             onChange={(event) => setFormState((prev) => ({ ...prev, city: event.target.value }))}
           />
           <div className="md:col-span-2">
-            <p className="mb-1 text-xs text-slate-600">رقم التواصل (مع رمز الدولة)</p>
+            <p className="mb-1 text-xs text-slate-600">{getFieldLabel(pageSettings, "phone", "رقم التواصل")} (مع رمز الدولة)</p>
             <div className="flex h-10 items-center gap-2 rounded-lg border border-slate-200 px-3 text-sm">
               <span className="text-slate-500">+{getCountryCallingCode(formState.country)}</span>
               <PhoneInput
@@ -1483,7 +1502,7 @@ export function EnterpriseCustomersManager() {
           <input
             type="email"
             className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
-            placeholder="البريد الإلكتروني"
+            placeholder={getFieldLabel(pageSettings, "email", "البريد الإلكتروني")}
             value={formState.email}
             onChange={(event) => setFormState((prev) => ({ ...prev, email: event.target.value }))}
           />
