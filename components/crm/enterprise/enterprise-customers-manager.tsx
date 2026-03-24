@@ -618,11 +618,12 @@ export function EnterpriseCustomersManager() {
   const [historyCustomerId, setHistoryCustomerId] = useState<string | null>(null);
   const [previewInvoiceId, setPreviewInvoiceId] = useState<string | null>(null);
   const [pageSettings, setPageSettings] = useState<GeneralPageRule | null>(null);
+  const [ordersPageSettings, setOrdersPageSettings] = useState<GeneralPageRule | null>(null);
 
   useEffect(() => {
     const applySettings = () => {
-      const settings = readGeneralPageSettings("customers");
-      setPageSettings(settings);
+      setPageSettings(readGeneralPageSettings("customers"));
+      setOrdersPageSettings(readGeneralPageSettings("orders"));
     };
 
     applySettings();
@@ -785,6 +786,34 @@ export function EnterpriseCustomersManager() {
     () => salesOrders.filter((order) => order.customerId === historyCustomerId),
     [salesOrders, historyCustomerId]
   );
+
+  const orderHistoryVisibleColumns = useMemo(() => {
+    const defaultColumns = ["orderNo", "date", "itemCount", "total", "status"] as const;
+    const candidateColumns = (ordersPageSettings?.tableColumns ?? [])
+      .filter((column) => isColumnVisible(ordersPageSettings, column.key))
+      .map((column) => column.key);
+
+    const supportedColumns = candidateColumns.filter((key) =>
+      [
+        "orderNo",
+        "invoiceNo",
+        "date",
+        "customerName",
+        "total",
+        "shippingCost",
+        "status",
+        "receiverName",
+        "receiverPhone",
+        "receiverCity",
+      ].includes(key)
+    );
+
+    if (supportedColumns.length === 0) {
+      return defaultColumns;
+    }
+
+    return supportedColumns;
+  }, [ordersPageSettings]);
 
   const customVisibleFields = useMemo(
     () =>
@@ -2034,31 +2063,101 @@ export function EnterpriseCustomersManager() {
                 <table className="min-w-full text-sm">
                   <thead className="bg-slate-50">
                     <tr>
-                      <th className="p-3 text-right font-semibold text-slate-700">رقم الطلب</th>
-                      <th className="p-3 text-right font-semibold text-slate-700">التاريخ</th>
-                      <th className="p-3 text-right font-semibold text-slate-700">القطع</th>
-                      <th className="p-3 text-right font-semibold text-slate-700">الإجمالي</th>
-                      <th className="p-3 text-right font-semibold text-slate-700">الحالة</th>
+                      {orderHistoryVisibleColumns.map((columnKey) => (
+                        <th key={columnKey} className="p-3 text-right font-semibold text-slate-700">
+                          {columnKey === "itemCount"
+                            ? "القطع"
+                            : getColumnLabel(
+                                ordersPageSettings,
+                                columnKey,
+                                columnKey === "orderNo"
+                                  ? "رقم الطلب"
+                                  : columnKey === "invoiceNo"
+                                    ? "رقم الفاتورة"
+                                    : columnKey === "date"
+                                      ? "التاريخ"
+                                      : columnKey === "customerName"
+                                        ? "العميل"
+                                        : columnKey === "total"
+                                          ? "الإجمالي"
+                                          : columnKey === "shippingCost"
+                                            ? "الشحن"
+                                            : columnKey === "status"
+                                              ? "الحالة"
+                                              : columnKey === "receiverName"
+                                                ? "اسم المستلم"
+                                                : columnKey === "receiverPhone"
+                                                  ? "رقم المستلم"
+                                                  : columnKey === "receiverCity"
+                                                    ? "مدينة المستلم"
+                                                    : columnKey
+                              )}
+                        </th>
+                      ))}
                     </tr>
                   </thead>
                   <tbody>
                     {customerHistoryOrders.map((order) => (
                       <tr key={order.id} className="border-t border-slate-100">
-                        <td className="p-3 text-slate-700">{order.orderNo}</td>
-                        <td className="p-3 text-slate-600">{order.date}</td>
-                        <td className="p-3 text-slate-600">{order.itemCount}</td>
-                        <td className="p-3 text-slate-700">{order.total.toLocaleString()} ر.س</td>
-                        <td className="p-3">
-                          <select
-                            className="h-8 rounded-md border border-slate-200 px-2 text-xs"
-                            value={order.status}
-                            onChange={(event) => updateOrderStatus(order.id, event.target.value as SalesOrder["status"])}
-                          >
-                            <option value="new">جديد</option>
-                            <option value="processing">قيد التنفيذ</option>
-                            <option value="completed">مكتمل</option>
-                          </select>
-                        </td>
+                        {orderHistoryVisibleColumns.map((columnKey) => {
+                          if (columnKey === "orderNo") {
+                            return <td key={columnKey} className="p-3 text-slate-700">{order.orderNo}</td>;
+                          }
+
+                          if (columnKey === "invoiceNo") {
+                            return <td key={columnKey} className="p-3 text-slate-600">{order.invoiceNo}</td>;
+                          }
+
+                          if (columnKey === "date") {
+                            return <td key={columnKey} className="p-3 text-slate-600">{order.date}</td>;
+                          }
+
+                          if (columnKey === "customerName") {
+                            return <td key={columnKey} className="p-3 text-slate-600">{order.customerName}</td>;
+                          }
+
+                          if (columnKey === "total") {
+                            return <td key={columnKey} className="p-3 text-slate-700">{order.total.toLocaleString()} ر.س</td>;
+                          }
+
+                          if (columnKey === "shippingCost") {
+                            return <td key={columnKey} className="p-3 text-slate-600">{order.shippingCost.toLocaleString()} ر.س</td>;
+                          }
+
+                          if (columnKey === "receiverName") {
+                            return <td key={columnKey} className="p-3 text-slate-600">{order.receiverName || "-"}</td>;
+                          }
+
+                          if (columnKey === "receiverPhone") {
+                            return <td key={columnKey} className="p-3 text-slate-600">{order.receiverPhone || "-"}</td>;
+                          }
+
+                          if (columnKey === "receiverCity") {
+                            return <td key={columnKey} className="p-3 text-slate-600">{order.receiverCity || "-"}</td>;
+                          }
+
+                          if (columnKey === "itemCount") {
+                            return <td key={columnKey} className="p-3 text-slate-600">{order.itemCount}</td>;
+                          }
+
+                          if (columnKey === "status") {
+                            return (
+                              <td key={columnKey} className="p-3">
+                                <select
+                                  className="h-8 rounded-md border border-slate-200 px-2 text-xs"
+                                  value={order.status}
+                                  onChange={(event) => updateOrderStatus(order.id, event.target.value as SalesOrder["status"])}
+                                >
+                                  <option value="new">جديد</option>
+                                  <option value="processing">قيد التنفيذ</option>
+                                  <option value="completed">مكتمل</option>
+                                </select>
+                              </td>
+                            );
+                          }
+
+                          return <td key={columnKey} className="p-3 text-slate-600">-</td>;
+                        })}
                       </tr>
                     ))}
                   </tbody>
