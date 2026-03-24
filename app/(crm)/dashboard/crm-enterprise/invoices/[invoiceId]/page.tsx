@@ -447,7 +447,7 @@ export default function InvoiceDetailsPage({ params }: InvoiceDetailsPageProps) 
                 <Pencil className="h-4 w-4" />
                 تعديل الفاتورة
               </Button>
-              <Button variant="destructive" onClick={deleteInvoice}>
+              <Button variant="danger" onClick={deleteInvoice}>
                 <Trash2 className="h-4 w-4" />
                 حذف الفاتورة
               </Button>
