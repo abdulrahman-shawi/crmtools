@@ -147,6 +147,10 @@ export function EnterpriseReturnsManager() {
   const [formState, setFormState] = useState<ReturnFormState>(initialFormState);
   const [productSearchQuery, setProductSearchQuery] = useState("");
   const [showProductDropdown, setShowProductDropdown] = useState(false);
+  const [replacementReturnedSearchQuery, setReplacementReturnedSearchQuery] = useState("");
+  const [showReplacementReturnedDropdown, setShowReplacementReturnedDropdown] = useState(false);
+  const [replacementNewSearchQuery, setReplacementNewSearchQuery] = useState("");
+  const [showReplacementNewDropdown, setShowReplacementNewDropdown] = useState(false);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -217,6 +221,32 @@ export function EnterpriseReturnsManager() {
       return name.includes(query) || category.includes(query);
     });
   }, [products, productSearchQuery]);
+
+  const filteredReplacementReturnedProducts = useMemo(() => {
+    const query = replacementReturnedSearchQuery.trim().toLowerCase();
+    if (!query) {
+      return products;
+    }
+
+    return products.filter((product) => {
+      const name = String(product.productName ?? "").toLowerCase();
+      const category = String(product.categoryName ?? "").toLowerCase();
+      return name.includes(query) || category.includes(query);
+    });
+  }, [products, replacementReturnedSearchQuery]);
+
+  const filteredReplacementNewProducts = useMemo(() => {
+    const query = replacementNewSearchQuery.trim().toLowerCase();
+    if (!query) {
+      return products;
+    }
+
+    return products.filter((product) => {
+      const name = String(product.productName ?? "").toLowerCase();
+      const category = String(product.categoryName ?? "").toLowerCase();
+      return name.includes(query) || category.includes(query);
+    });
+  }, [products, replacementNewSearchQuery]);
 
   const totals = useMemo(() => {
     const totalReturns = rows.length;
@@ -296,6 +326,10 @@ export function EnterpriseReturnsManager() {
     setFormState(initialFormState);
     setProductSearchQuery("");
     setShowProductDropdown(false);
+    setReplacementReturnedSearchQuery("");
+    setShowReplacementReturnedDropdown(false);
+    setReplacementNewSearchQuery("");
+    setShowReplacementNewDropdown(false);
     setIsModalOpen(true);
   }
 
@@ -317,6 +351,10 @@ export function EnterpriseReturnsManager() {
     });
     setProductSearchQuery("");
     setShowProductDropdown(false);
+    setReplacementReturnedSearchQuery("");
+    setShowReplacementReturnedDropdown(false);
+    setReplacementNewSearchQuery("");
+    setShowReplacementNewDropdown(false);
     setIsModalOpen(true);
   }
 
@@ -331,6 +369,30 @@ export function EnterpriseReturnsManager() {
     }));
     setProductSearchQuery("");
     setShowProductDropdown(false);
+  }
+
+  /**
+   * Selects returned product in replacement flow and hides search list.
+   */
+  function handleSelectReplacementReturnedProduct(product: ProductCatalogEntry) {
+    setFormState((prev) => ({
+      ...prev,
+      replacementReturnedProductName: String(product.productName ?? ""),
+    }));
+    setReplacementReturnedSearchQuery("");
+    setShowReplacementReturnedDropdown(false);
+  }
+
+  /**
+   * Selects replacement new product and hides search list.
+   */
+  function handleSelectReplacementNewProduct(product: ProductCatalogEntry) {
+    setFormState((prev) => ({
+      ...prev,
+      replacementNewProductName: String(product.productName ?? ""),
+    }));
+    setReplacementNewSearchQuery("");
+    setShowReplacementNewDropdown(false);
   }
 
   /**
@@ -401,6 +463,10 @@ export function EnterpriseReturnsManager() {
     setFormState(initialFormState);
     setProductSearchQuery("");
     setShowProductDropdown(false);
+    setReplacementReturnedSearchQuery("");
+    setShowReplacementReturnedDropdown(false);
+    setReplacementNewSearchQuery("");
+    setShowReplacementNewDropdown(false);
   }
 
   /**
@@ -571,38 +637,110 @@ export function EnterpriseReturnsManager() {
             <>
               <div className="space-y-2 md:col-span-2">
                 <label className="text-sm font-medium text-slate-700">المنتج المرتجع</label>
-                <select
-                  className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm"
-                  value={formState.replacementReturnedProductName}
-                  onChange={(event) =>
-                    setFormState((prev) => ({ ...prev, replacementReturnedProductName: event.target.value }))
-                  }
-                >
-                  <option value="">اختر المنتج المرتجع</option>
-                  {products.map((product) => (
-                    <option key={`returned_${product.id}`} value={String(product.productName ?? "")}>
-                      {product.productName}
-                    </option>
-                  ))}
-                </select>
+                {!formState.replacementReturnedProductName ? (
+                  <div className="relative">
+                    <input
+                      type="text"
+                      className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm"
+                      placeholder="ابحث عن المنتج المرتجع..."
+                      value={replacementReturnedSearchQuery}
+                      onChange={(event) => {
+                        setReplacementReturnedSearchQuery(event.target.value);
+                        setShowReplacementReturnedDropdown(true);
+                      }}
+                      onFocus={() => setShowReplacementReturnedDropdown(true)}
+                    />
+
+                    {showReplacementReturnedDropdown && (
+                      <div className="absolute z-20 mt-1 max-h-52 w-full overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg">
+                        {filteredReplacementReturnedProducts.length > 0 ? (
+                          filteredReplacementReturnedProducts.map((product) => (
+                            <button
+                              key={`returned_${product.id}`}
+                              type="button"
+                              className="block w-full border-b border-slate-100 px-3 py-2 text-right text-sm hover:bg-slate-50"
+                              onClick={() => handleSelectReplacementReturnedProduct(product)}
+                            >
+                              <span className="font-medium text-slate-800">{product.productName}</span>
+                              <span className="mr-2 text-xs text-slate-500">{product.categoryName}</span>
+                            </button>
+                          ))
+                        ) : (
+                          <p className="px-3 py-2 text-sm text-slate-500">لا توجد نتائج</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
+                    <p className="text-sm font-medium text-emerald-800">{formState.replacementReturnedProductName}</p>
+                    <button
+                      type="button"
+                      className="text-sm text-emerald-700 hover:underline"
+                      onClick={() => {
+                        setFormState((prev) => ({ ...prev, replacementReturnedProductName: "" }));
+                        setReplacementReturnedSearchQuery("");
+                        setShowReplacementReturnedDropdown(true);
+                      }}
+                    >
+                      تغيير المنتج
+                    </button>
+                  </div>
+                )}
               </div>
 
               <div className="space-y-2 md:col-span-2">
                 <label className="text-sm font-medium text-slate-700">المنتج المبدل</label>
-                <select
-                  className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm"
-                  value={formState.replacementNewProductName}
-                  onChange={(event) =>
-                    setFormState((prev) => ({ ...prev, replacementNewProductName: event.target.value }))
-                  }
-                >
-                  <option value="">اختر المنتج المبدل</option>
-                  {products.map((product) => (
-                    <option key={`new_${product.id}`} value={String(product.productName ?? "")}>
-                      {product.productName}
-                    </option>
-                  ))}
-                </select>
+                {!formState.replacementNewProductName ? (
+                  <div className="relative">
+                    <input
+                      type="text"
+                      className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm"
+                      placeholder="ابحث عن المنتج المبدل..."
+                      value={replacementNewSearchQuery}
+                      onChange={(event) => {
+                        setReplacementNewSearchQuery(event.target.value);
+                        setShowReplacementNewDropdown(true);
+                      }}
+                      onFocus={() => setShowReplacementNewDropdown(true)}
+                    />
+
+                    {showReplacementNewDropdown && (
+                      <div className="absolute z-20 mt-1 max-h-52 w-full overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg">
+                        {filteredReplacementNewProducts.length > 0 ? (
+                          filteredReplacementNewProducts.map((product) => (
+                            <button
+                              key={`new_${product.id}`}
+                              type="button"
+                              className="block w-full border-b border-slate-100 px-3 py-2 text-right text-sm hover:bg-slate-50"
+                              onClick={() => handleSelectReplacementNewProduct(product)}
+                            >
+                              <span className="font-medium text-slate-800">{product.productName}</span>
+                              <span className="mr-2 text-xs text-slate-500">{product.categoryName}</span>
+                            </button>
+                          ))
+                        ) : (
+                          <p className="px-3 py-2 text-sm text-slate-500">لا توجد نتائج</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
+                    <p className="text-sm font-medium text-emerald-800">{formState.replacementNewProductName}</p>
+                    <button
+                      type="button"
+                      className="text-sm text-emerald-700 hover:underline"
+                      onClick={() => {
+                        setFormState((prev) => ({ ...prev, replacementNewProductName: "" }));
+                        setReplacementNewSearchQuery("");
+                        setShowReplacementNewDropdown(true);
+                      }}
+                    >
+                      تغيير المنتج
+                    </button>
+                  </div>
+                )}
               </div>
             </>
           )}
