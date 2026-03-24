@@ -31,6 +31,7 @@ interface ReturnRecord {
   reason: string;
   customer: string;
   stage: ReturnStage;
+  stageNotes: Record<ReturnStage, string>;
   createdAt: string;
 }
 
@@ -43,10 +44,23 @@ interface ReturnFormState {
   reason: string;
   customer: string;
   stage: ReturnStage;
+  stageNotes: Record<ReturnStage, string>;
 }
 
 const RETURNS_STORAGE_KEY = "crm-enterprise-returns";
 const CATALOG_STORAGE_KEY = "crm-enterprise-products-catalog";
+
+/**
+ * Creates empty note map for all return stages.
+ */
+function createEmptyStageNotes(): Record<ReturnStage, string> {
+  return {
+    received: "",
+    inspection: "",
+    maintenance: "",
+    delivered: "",
+  };
+}
 
 const initialReturns: ReturnRecord[] = [
   {
@@ -58,6 +72,12 @@ const initialReturns: ReturnRecord[] = [
     reason: "عطل في الوحدة الرئيسية",
     customer: "شركة النخبة",
     stage: "inspection",
+    stageNotes: {
+      received: "تم استلام القطعة من العميل.",
+      inspection: "تم اكتشاف خلل في اللوحة.",
+      maintenance: "",
+      delivered: "",
+    },
     createdAt: "2026-03-24",
   },
   {
@@ -69,20 +89,32 @@ const initialReturns: ReturnRecord[] = [
     reason: "العميل طلب استرجاع خلال فترة السماح",
     customer: "مؤسسة رواد",
     stage: "received",
+    stageNotes: {
+      received: "تمت مطابقة فاتورة الشراء.",
+      inspection: "",
+      maintenance: "",
+      delivered: "",
+    },
     createdAt: "2026-03-24",
   },
 ];
 
-const initialFormState: ReturnFormState = {
-  returnType: "refund",
-  productId: "",
-  productName: "",
-  replacementNewProductName: "",
-  returnedQuantity: "",
-  reason: "",
-  customer: "",
-  stage: "received",
-};
+/**
+ * Builds a fresh form state object.
+ */
+function createInitialFormState(): ReturnFormState {
+  return {
+    returnType: "refund",
+    productId: "",
+    productName: "",
+    replacementNewProductName: "",
+    returnedQuantity: "",
+    reason: "",
+    customer: "",
+    stage: "received",
+    stageNotes: createEmptyStageNotes(),
+  };
+}
 
 const returnTypeLabel: Record<ReturnType, string> = {
   damaged: "تالف",
@@ -92,8 +124,8 @@ const returnTypeLabel: Record<ReturnType, string> = {
 
 const returnStageLabel: Record<ReturnStage, string> = {
   received: "التسليم",
-  inspection: "اكتشاف الخطأ",
-  maintenance: "تصليحه",
+  inspection: "الفحص",
+  maintenance: "الصيانة",
   delivered: "التسليم النهائي",
 };
 
@@ -130,7 +162,8 @@ function getStageProgress(type: ReturnType, stage: ReturnStage): { currentStep: 
  * Converts row fields to searchable text.
  */
 function toSearchText(row: ReturnRecord): string {
-  return `${row.productName} ${row.customer} ${row.reason} ${row.replacementReturnedProductName ?? ""} ${row.replacementNewProductName ?? ""} ${returnTypeLabel[row.returnType]} ${returnStageLabel[row.stage]} ${row.createdAt}`;
+  const notesText = Object.values(row.stageNotes ?? {}).join(" ");
+  return `${row.productName} ${row.customer} ${row.reason} ${row.replacementReturnedProductName ?? ""} ${row.replacementNewProductName ?? ""} ${notesText} ${returnTypeLabel[row.returnType]} ${returnStageLabel[row.stage]} ${row.createdAt}`;
 }
 
 /**
@@ -142,7 +175,7 @@ export function EnterpriseReturnsManager() {
   const [page, setPage] = useState(1);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [formState, setFormState] = useState<ReturnFormState>(initialFormState);
+  const [formState, setFormState] = useState<ReturnFormState>(createInitialFormState);
   const [productSearchQuery, setProductSearchQuery] = useState("");
   const [showProductDropdown, setShowProductDropdown] = useState(false);
   const [replacementNewSearchQuery, setReplacementNewSearchQuery] = useState("");
@@ -161,7 +194,14 @@ export function EnterpriseReturnsManager() {
 
       const parsed = JSON.parse(raw) as ReturnRecord[];
       if (Array.isArray(parsed) && parsed.length > 0) {
-        setRows(parsed);
+        const normalized = parsed.map((row) => ({
+          ...row,
+          stageNotes: {
+            ...createEmptyStageNotes(),
+            ...(row.stageNotes ?? {}),
+          },
+        }));
+        setRows(normalized);
       }
     } catch {
       // Keep defaults if local data is invalid.
@@ -277,6 +317,10 @@ export function EnterpriseReturnsManager() {
         },
       },
       {
+        header: "ملاحظة المرحلة الحالية",
+        accessor: (row) => row.stageNotes?.[row.stage] || "-",
+      },
+      {
         header: "الإجراءات",
         accessor: (row) => (
           <div className="flex items-center gap-1">
@@ -306,7 +350,7 @@ export function EnterpriseReturnsManager() {
    */
   function openCreateModal() {
     setEditingId(null);
-    setFormState(initialFormState);
+    setFormState(createInitialFormState());
     setProductSearchQuery("");
     setShowProductDropdown(false);
     setReplacementNewSearchQuery("");
@@ -328,6 +372,10 @@ export function EnterpriseReturnsManager() {
       reason: row.reason,
       customer: row.customer,
       stage: row.stage,
+      stageNotes: {
+        ...createEmptyStageNotes(),
+        ...(row.stageNotes ?? {}),
+      },
     });
     setProductSearchQuery("");
     setShowProductDropdown(false);
@@ -406,6 +454,10 @@ export function EnterpriseReturnsManager() {
       reason: formState.reason.trim(),
       customer: formState.customer.trim(),
       stage: formState.stage,
+      stageNotes: {
+        ...createEmptyStageNotes(),
+        ...formState.stageNotes,
+      },
       createdAt: editingId
         ? rows.find((item) => item.id === editingId)?.createdAt ?? new Date().toISOString().slice(0, 10)
         : new Date().toISOString().slice(0, 10),
@@ -421,7 +473,7 @@ export function EnterpriseReturnsManager() {
 
     setIsModalOpen(false);
     setEditingId(null);
-    setFormState(initialFormState);
+    setFormState(createInitialFormState());
     setProductSearchQuery("");
     setShowProductDropdown(false);
     setReplacementNewSearchQuery("");
@@ -686,6 +738,32 @@ export function EnterpriseReturnsManager() {
                 </option>
               ))}
             </select>
+          </div>
+
+          <div className="space-y-3 md:col-span-2">
+            <label className="text-sm font-medium text-slate-700">ملاحظات كل مرحلة</label>
+            <div className="grid gap-3 md:grid-cols-2">
+              {getStageOptions(formState.returnType).map((stageValue) => (
+                <div key={`note_${stageValue}`} className="space-y-1">
+                  <p className="text-xs font-medium text-slate-600">{returnStageLabel[stageValue]}</p>
+                  <textarea
+                    rows={2}
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                    placeholder={`اكتب ملاحظة مرحلة ${returnStageLabel[stageValue]}...`}
+                    value={formState.stageNotes[stageValue]}
+                    onChange={(event) =>
+                      setFormState((prev) => ({
+                        ...prev,
+                        stageNotes: {
+                          ...prev.stageNotes,
+                          [stageValue]: event.target.value,
+                        },
+                      }))
+                    }
+                  />
+                </div>
+              ))}
+            </div>
           </div>
         </div>
 
