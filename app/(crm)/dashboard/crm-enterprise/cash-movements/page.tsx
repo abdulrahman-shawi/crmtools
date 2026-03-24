@@ -1,9 +1,9 @@
 import { EnterpriseWarehouseMovementsManager } from "@/components/crm/enterprise/enterprise-warehouse-movements-manager";
 
 /**
- * Dedicated CRM Enterprise warehouse movements page.
- * Handles inventory transfers between warehouses and tracks movement history.
+ * Cash movements and warehouse inventory transfers page.
+ * Displays all warehouses, products inventory, and manages product transfers.
  */
-export default function CrmEnterpriseWarehouseMovementsPage() {
+export default function CrmEnterpriseCashMovementsPage() {
   return <EnterpriseWarehouseMovementsManager />;
 }

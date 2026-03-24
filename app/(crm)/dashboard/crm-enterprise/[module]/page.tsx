@@ -8,7 +8,7 @@ interface CrmEnterpriseModulePageProps {
   };
 }
 
-const dedicatedModuleSlugs = new Set(["customers", "products", "warehouses", "orders", "shipping-companies", "expenses"]);
+const dedicatedModuleSlugs = new Set(["customers", "products", "warehouses", "orders", "shipping-companies", "expenses", "cash-movements"]);
 
 /**
  * Generates static params for all CRM enterprise modules.
