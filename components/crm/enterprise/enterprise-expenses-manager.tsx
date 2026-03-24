@@ -38,6 +38,7 @@ interface ShippingCompanyRow {
 interface GeneralExpenseDetails {
   expenseName: string;
   expenseQuantity: number;
+  expensePrice: number;
   period: GeneralExpensePeriod;
   notes: string;
 }
@@ -71,6 +72,7 @@ interface ExpenseFormState {
   date: string;
   expenseName: string;
   expenseQuantity: string;
+  expensePrice: string;
   generalPeriod: GeneralExpensePeriod;
   generalNotes: string;
   supplierName: string;
@@ -126,10 +128,11 @@ const initialExpenses: ExpenseRecord[] = [
     id: "exp_1",
     type: "general",
     date: "2026-03-23",
-    totalAmount: 0,
+    totalAmount: 250,
     general: {
       expenseName: "مستلزمات مكتبية",
       expenseQuantity: 10,
+      expensePrice: 25,
       period: "monthly",
       notes: "شراء ورق وطباعة",
     },
@@ -172,6 +175,7 @@ const initialFormState: ExpenseFormState = {
   date: new Date().toISOString().slice(0, 10),
   expenseName: "",
   expenseQuantity: "",
+  expensePrice: "",
   generalPeriod: "daily",
   generalNotes: "",
   supplierName: "",
@@ -309,6 +313,7 @@ function normalizeStoredExpenses(input: unknown[]): ExpenseRecord[] {
         mappedGeneral = {
           expenseName: typeof generalRaw?.expenseName === "string" ? generalRaw.expenseName : "مصروف عام",
           expenseQuantity: Math.max(1, toNumber(generalRaw?.expenseQuantity, 1)),
+          expensePrice: Math.max(0, toNumber(generalRaw?.expensePrice, 0)),
           period,
           notes: typeof generalRaw?.notes === "string" ? generalRaw.notes : "",
         };
@@ -370,7 +375,9 @@ function normalizeStoredExpenses(input: unknown[]): ExpenseRecord[] {
       const fallbackTotal = mappedPurchase
         ? Math.max(0, mappedPurchase.items.reduce((sum, item) => sum + item.price * item.quantity, 0) - mappedPurchase.discountAmount) +
           mappedPurchase.shippingCost
-        : 0;
+        : mappedGeneral
+          ? mappedGeneral.expenseQuantity * mappedGeneral.expensePrice
+          : 0;
 
       return {
         id: rowId,
@@ -506,6 +513,8 @@ export function EnterpriseExpensesManager() {
     () => [
       { header: "اسم المصروف", accessor: (row) => row.general?.expenseName ?? "-" },
       { header: "الكمية", accessor: (row) => row.general?.expenseQuantity ?? 0 },
+      { header: "سعر المصروف", accessor: (row) => (row.general?.expensePrice ?? 0).toLocaleString() },
+      { header: "الإجمالي", accessor: (row) => row.totalAmount.toLocaleString() },
       { header: "النوع", accessor: (row) => generalExpensePeriodLabel[row.general?.period ?? "daily"] },
       { header: "ملاحظات", accessor: (row) => row.general?.notes ?? "-" },
       { header: "التاريخ", accessor: "date" },
@@ -596,6 +605,7 @@ export function EnterpriseExpensesManager() {
         date: row.date,
         expenseName: row.general?.expenseName ?? "",
         expenseQuantity: String(row.general?.expenseQuantity ?? ""),
+        expensePrice: String(row.general?.expensePrice ?? ""),
         generalPeriod: row.general?.period ?? "daily",
         generalNotes: row.general?.notes ?? "",
         supplierName: "",
@@ -616,6 +626,7 @@ export function EnterpriseExpensesManager() {
         date: row.date,
         expenseName: "",
         expenseQuantity: "",
+        expensePrice: "",
         generalPeriod: "daily",
         generalNotes: "",
         supplierName: row.purchase?.supplierName ?? "",
@@ -706,14 +717,23 @@ export function EnterpriseExpensesManager() {
         return;
       }
 
+      const price = Number(formState.expensePrice || 0);
+      if (Number.isNaN(price) || price < 0) {
+        toast.error("سعر المصروف غير صحيح");
+        return;
+      }
+
+      const generalTotal = quantity * price;
+
       const payload: ExpenseRecord = {
         id: editingId ?? `exp_${Date.now()}`,
         type: "general",
         date,
-        totalAmount: 0,
+        totalAmount: generalTotal,
         general: {
           expenseName: formState.expenseName.trim(),
           expenseQuantity: quantity,
+          expensePrice: price,
           period: formState.generalPeriod,
           notes: formState.generalNotes.trim(),
         },
@@ -961,6 +981,14 @@ export function EnterpriseExpensesManager() {
                 placeholder="كمية المصروف"
                 value={formState.expenseQuantity}
                 onChange={(event) => setFormState((prev) => ({ ...prev, expenseQuantity: event.target.value }))}
+              />
+              <input
+                type="number"
+                min={0}
+                className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
+                placeholder="سعر المصروف"
+                value={formState.expensePrice}
+                onChange={(event) => setFormState((prev) => ({ ...prev, expensePrice: event.target.value }))}
               />
               <select
                 className="h-10 rounded-lg border border-slate-200 px-3 text-sm"

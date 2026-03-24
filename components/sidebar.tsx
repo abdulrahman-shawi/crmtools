@@ -156,7 +156,6 @@ export const Sidebar = ({ isCollapsed, setIsCollapsed }: { isCollapsed: boolean;
         { icon: WalletCards, label: "حركة الصندوق", href: "/dashboard/crm-enterprise/cash-movements" },
         { icon: Warehouse, label: "المخازن", href: "/dashboard/crm-enterprise/warehouses" },
         { icon: Truck, label: "شركات الشحن", href: "/dashboard/crm-enterprise/shipping-companies" },
-        { icon: FileSpreadsheet, label: "الفواتير", href: "/dashboard/crm-enterprise/invoices" },
         { icon: KanbanSquare, label: "الفرص البيعية", href: "/dashboard/crm-enterprise/opportunities" },
         { icon: Undo2, label: "المرتجعات", href: "/dashboard/crm-enterprise/returns" },
         { icon: ListTodo, label: "مهام الفرق", href: "/dashboard/crm-enterprise/tasks" },
