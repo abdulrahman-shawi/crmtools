@@ -137,6 +137,7 @@ interface SalesOrder {
   total: number;
   itemCount: number;
   status: "new" | "processing" | "completed";
+  customFields?: Record<string, string>;
 }
 
 const SALES_INVOICES_STORAGE_KEY = "crm-enterprise-sales-invoices";
@@ -227,6 +228,13 @@ const countryOptions: Array<{ code: CountryCode; label: string }> = [
   { code: "EG", label: "مصر" },
   { code: "JO", label: "الأردن" },
 ];
+
+const BUILTIN_ORDER_FIELD_KEYS = new Set([
+  "receiverName",
+  "receiverPhone",
+  "receiverCity",
+  "deliveryNotes",
+]);
 
 const BUILTIN_CUSTOMER_FORM_KEYS = new Set([
   "companyName",
@@ -612,6 +620,7 @@ export function EnterpriseCustomersManager() {
   const [posReceiverCity, setPosReceiverCity] = useState("");
   const [posReceivedAmount, setPosReceivedAmount] = useState("");
   const [posDeliveryNotes, setPosDeliveryNotes] = useState("");
+  const [posCustomFieldValues, setPosCustomFieldValues] = useState<Record<string, string>>({});
   const [salesInvoices, setSalesInvoices] = useState<SalesInvoice[]>(initialSalesInvoices);
   const [salesOrders, setSalesOrders] = useState<SalesOrder[]>(initialSalesOrders);
   const [isCustomerHistoryModalOpen, setIsCustomerHistoryModalOpen] = useState(false);
@@ -793,27 +802,20 @@ export function EnterpriseCustomersManager() {
       .filter((column) => isColumnVisible(ordersPageSettings, column.key))
       .map((column) => column.key);
 
-    const supportedColumns = candidateColumns.filter((key) =>
-      [
-        "orderNo",
-        "invoiceNo",
-        "date",
-        "customerName",
-        "total",
-        "shippingCost",
-        "status",
-        "receiverName",
-        "receiverPhone",
-        "receiverCity",
-      ].includes(key)
-    );
-
-    if (supportedColumns.length === 0) {
+    if (candidateColumns.length === 0) {
       return defaultColumns;
     }
 
-    return supportedColumns;
+    return candidateColumns;
   }, [ordersPageSettings]);
+
+  const orderDynamicFields = useMemo(
+    () =>
+      (ordersPageSettings?.fields ?? []).filter(
+        (field) => field.isVisible && !BUILTIN_ORDER_FIELD_KEYS.has(field.key)
+      ),
+    [ordersPageSettings]
+  );
 
   const customVisibleFields = useMemo(
     () =>
@@ -1034,7 +1036,18 @@ export function EnterpriseCustomersManager() {
     setPosReceiverCity(customer.city);
     setPosReceivedAmount("");
     setPosDeliveryNotes("");
+    setPosCustomFieldValues({});
     setIsPosModalOpen(true);
+  }
+
+  /**
+   * Updates one dynamic field value for POS order creation.
+   */
+  function handlePosCustomFieldChange(fieldKey: string, value: string) {
+    setPosCustomFieldValues((prev) => ({
+      ...prev,
+      [fieldKey]: value,
+    }));
   }
 
   /**
@@ -1156,6 +1169,18 @@ export function EnterpriseCustomersManager() {
       return;
     }
 
+    for (const field of orderDynamicFields) {
+      if (!field.isRequired) {
+        continue;
+      }
+
+      const value = posCustomFieldValues[field.key];
+      if (!value || !value.trim()) {
+        toast.error(`الحقل ${field.label} مطلوب`);
+        return;
+      }
+    }
+
     const now = new Date();
     const today = now.toISOString().slice(0, 10);
     const invoiceNo = `INV-${now.getTime().toString().slice(-6)}`;
@@ -1216,6 +1241,7 @@ export function EnterpriseCustomersManager() {
       total,
       itemCount: posItems.reduce((sum, item) => sum + item.quantity, 0),
       status: "new",
+      customFields: posCustomFieldValues,
     };
 
     setSalesInvoices((prev) => [invoice, ...prev]);
@@ -1244,6 +1270,7 @@ export function EnterpriseCustomersManager() {
     setPosReceiverCity("");
     setPosReceivedAmount("");
     setPosDeliveryNotes("");
+    setPosCustomFieldValues({});
     toast.success(`تم إنشاء ${invoice.invoiceNo} و ${order.orderNo}`);
   }
 
@@ -1846,6 +1873,63 @@ export function EnterpriseCustomersManager() {
                   onChange={(event) => setPosReceiverCity(event.target.value)}
                 />
               </div>
+              {orderDynamicFields.map((field) => {
+                if (field.type === "textarea") {
+                  return (
+                    <div key={field.id} className="md:col-span-2">
+                      <p className="mb-1 text-xs font-medium text-slate-600">{field.label}</p>
+                      <textarea
+                        className="min-h-[80px] w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                        value={posCustomFieldValues[field.key] ?? ""}
+                        onChange={(event) => handlePosCustomFieldChange(field.key, event.target.value)}
+                      />
+                    </div>
+                  );
+                }
+
+                if (field.type === "select") {
+                  return (
+                    <div key={field.id}>
+                      <p className="mb-1 text-xs font-medium text-slate-600">{field.label}</p>
+                      <select
+                        className="h-9 w-full rounded-lg border border-slate-200 px-2 text-sm"
+                        value={posCustomFieldValues[field.key] ?? ""}
+                        onChange={(event) => handlePosCustomFieldChange(field.key, event.target.value)}
+                      >
+                        <option value="">اختر {field.label}</option>
+                        {(field.options ?? []).map((option) => (
+                          <option key={option} value={option}>
+                            {option}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  );
+                }
+
+                const htmlInputType: "text" | "number" | "date" | "email" | "tel" =
+                  field.type === "number"
+                    ? "number"
+                    : field.type === "date"
+                      ? "date"
+                      : field.type === "email"
+                        ? "email"
+                        : field.type === "phone"
+                          ? "tel"
+                          : "text";
+
+                return (
+                  <div key={field.id}>
+                    <p className="mb-1 text-xs font-medium text-slate-600">{field.label}</p>
+                    <input
+                      type={htmlInputType}
+                      className="h-9 w-full rounded-lg border border-slate-200 px-2 text-sm"
+                      value={posCustomFieldValues[field.key] ?? ""}
+                      onChange={(event) => handlePosCustomFieldChange(field.key, event.target.value)}
+                    />
+                  </div>
+                );
+              })}
             </div>
 
             <p className="text-sm font-semibold text-slate-800">بنود الفاتورة</p>
@@ -2164,7 +2248,7 @@ export function EnterpriseCustomersManager() {
                             );
                           }
 
-                          return <td key={columnKey} className="p-3 text-slate-600">-</td>;
+                          return <td key={columnKey} className="p-3 text-slate-600">{order.customFields?.[columnKey] || "-"}</td>;
                         })}
                       </tr>
                     ))}
