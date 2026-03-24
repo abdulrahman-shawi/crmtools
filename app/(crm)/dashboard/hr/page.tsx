@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CalendarCheck2, ReceiptText, UserRoundPlus, Users } from "lucide-react";
+import { CalendarCheck2, ReceiptText, ShieldCheck, UserRoundPlus, Users } from "lucide-react";
 import DynamicCard from "@/components/ui/dynamicCard";
 import { SectionHeader } from "@/components/ui/section-header";
 import { hrSummary } from "@/lib/data/mock-hr";
@@ -13,6 +13,7 @@ export default function HrDashboardPage() {
     { title: "الحضور", href: "/dashboard/hr/attendance", icon: CalendarCheck2 },
     { title: "الرواتب", href: "/dashboard/hr/payroll", icon: ReceiptText },
     { title: "التوظيف", href: "/dashboard/hr/recruitment", icon: UserRoundPlus },
+    { title: "صلاحيات الفريق", href: "/dashboard/hr/team-permissions", icon: ShieldCheck },
   ];
 
   return (

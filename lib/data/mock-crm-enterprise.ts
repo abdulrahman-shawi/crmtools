@@ -1,4 +1,5 @@
 import type { CrmModuleDefinition } from "@/lib/types/crm-enterprise";
+import { hrEmployees } from "@/lib/data/mock-hr";
 
 const crmEnterpriseModulesList: CrmModuleDefinition[] = [
   {
@@ -342,7 +343,16 @@ const crmEnterpriseModulesList: CrmModuleDefinition[] = [
     addLabel: "إضافة مهمة",
     fields: [
       { key: "title", label: "عنوان المهمة", type: "text", required: true },
-      { key: "assignee", label: "المسؤول", type: "text", required: true },
+      {
+        key: "assignee",
+        label: "المسؤول",
+        type: "select",
+        required: true,
+        options: hrEmployees.map((employee) => ({
+          value: employee.fullName,
+          label: employee.fullName,
+        })),
+      },
       { key: "priority", label: "الأولوية", type: "select", options: [
         { value: "high", label: "عالية" },
         { value: "medium", label: "متوسطة" },

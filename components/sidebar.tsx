@@ -11,6 +11,7 @@ import {
   UserCog,
   CalendarDays,
   Wallet,
+  ShieldCheck,
   BriefcaseBusiness,
   Building2,
   Boxes,
@@ -135,6 +136,7 @@ export const Sidebar = ({ isCollapsed, setIsCollapsed }: { isCollapsed: boolean;
       items: [
         { icon: UserCog, label: "نظرة عامة", href: "/dashboard/hr" },
         { icon: Users, label: "الموظفون", href: "/dashboard/hr/employees" },
+        { icon: ShieldCheck, label: "صلاحيات الفريق", href: "/dashboard/hr/team-permissions" },
         { icon: CalendarDays, label: "الحضور", href: "/dashboard/hr/attendance" },
         { icon: Wallet, label: "الرواتب", href: "/dashboard/hr/payroll" },
         { icon: BriefcaseBusiness, label: "التوظيف", href: "/dashboard/hr/recruitment" },
