@@ -804,9 +804,9 @@ export function EnterpriseOrdersManager() {
               <p>رقم الفاتورة: <span className="font-semibold">{detailsOrder.invoiceNo}</span></p>
               <p>العميل: <span className="font-semibold">{detailsOrder.customerName}</span></p>
               <p>طريقة الدفع: <span className="font-semibold">{paymentMethodLabel[detailsOrder.paymentMethod]}</span></p>
-              <p>اسم المستلم: <span className="font-semibold">{detailsOrder.receiverName || "-"}</span></p>
-              <p>رقم المستلم: <span className="font-semibold">{detailsOrder.receiverPhone || "-"}</span></p>
-              <p>مدينة الاستلام: <span className="font-semibold">{detailsOrder.receiverCity || "-"}</span></p>
+              <p>{getFieldLabel(pageSettings, "receiverName", "اسم المستلم")}: <span className="font-semibold">{detailsOrder.receiverName || "-"}</span></p>
+              <p>{getFieldLabel(pageSettings, "receiverPhone", "رقم المستلم")}: <span className="font-semibold">{detailsOrder.receiverPhone || "-"}</span></p>
+              <p>{getFieldLabel(pageSettings, "receiverCity", "مدينة الاستلام")}: <span className="font-semibold">{detailsOrder.receiverCity || "-"}</span></p>
               <p>المبلغ المستلم: <span className="font-semibold">{detailsOrder.receivedAmount.toLocaleString()}</span></p>
               <p>المبلغ المتبقي: <span className="font-semibold">{detailsOrder.remainingAmount.toLocaleString()}</span></p>
               <p>شركة الشحن: <span className="font-semibold">{detailsOrder.shippingCompanyName || "غير محددة"}</span></p>

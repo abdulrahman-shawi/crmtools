@@ -1824,19 +1824,19 @@ export function EnterpriseCustomersManager() {
             <div className="grid grid-cols-1 gap-2 rounded-lg border border-slate-200 bg-white p-3 md:grid-cols-2">
               <input
                 className="h-9 rounded-lg border border-slate-200 px-2 text-sm"
-                placeholder="اسم المستلم"
+                placeholder={getFieldLabel(ordersPageSettings, "receiverName", "اسم المستلم")}
                 value={posReceiverName}
                 onChange={(event) => setPosReceiverName(event.target.value)}
               />
               <input
                 className="h-9 rounded-lg border border-slate-200 px-2 text-sm"
-                placeholder="رقم المستلم"
+                placeholder={getFieldLabel(ordersPageSettings, "receiverPhone", "رقم المستلم")}
                 value={posReceiverPhone}
                 onChange={(event) => setPosReceiverPhone(event.target.value)}
               />
               <input
                 className="h-9 rounded-lg border border-slate-200 px-2 text-sm md:col-span-2"
-                placeholder="مدينة الاستلام"
+                placeholder={getFieldLabel(ordersPageSettings, "receiverCity", "مدينة الاستلام")}
                 value={posReceiverCity}
                 onChange={(event) => setPosReceiverCity(event.target.value)}
               />
