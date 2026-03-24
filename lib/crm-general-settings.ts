@@ -1,4 +1,5 @@
 export const GENERAL_SETTINGS_STORAGE_KEY = "crm-enterprise-general-settings";
+export const GENERAL_SETTINGS_UPDATED_EVENT = "crm-enterprise-general-settings-updated";
 
 export interface GeneralFieldRule {
   id: string;
@@ -41,9 +42,9 @@ export interface GeneralSettingsShape {
 }
 
 /**
- * Returns one page settings rule by slug from localStorage, if available.
+ * Reads the full general settings object from localStorage.
  */
-export function readGeneralPageSettings(slug: string): GeneralPageRule | null {
+export function readGeneralSettings(): GeneralSettingsShape | null {
   if (typeof window === "undefined") {
     return null;
   }
@@ -59,19 +60,73 @@ export function readGeneralPageSettings(slug: string): GeneralPageRule | null {
       return null;
     }
 
-    const page = parsed.pages.find((item) => item.slug === slug);
-    if (!page) {
-      return null;
-    }
-
     return {
-      ...page,
-      fields: Array.isArray(page.fields) ? page.fields : [],
-      tableColumns: Array.isArray(page.tableColumns) ? page.tableColumns : [],
+      sections: Array.isArray(parsed.sections) ? parsed.sections : [],
+      pages: parsed.pages.map((page) => ({
+        ...page,
+        fields: Array.isArray(page.fields) ? page.fields : [],
+        tableColumns: Array.isArray(page.tableColumns) ? page.tableColumns : [],
+      })),
+      updatedAt: parsed.updatedAt,
     };
   } catch {
     return null;
   }
+}
+
+/**
+ * Returns one page settings rule by slug from localStorage, if available.
+ */
+export function readGeneralPageSettings(slug: string): GeneralPageRule | null {
+  const settings = readGeneralSettings();
+  if (!settings) {
+    return null;
+  }
+
+  const page = settings.pages.find((item) => item.slug === slug);
+    if (!page) {
+      return null;
+    }
+
+  return {
+    ...page,
+    fields: Array.isArray(page.fields) ? page.fields : [],
+    tableColumns: Array.isArray(page.tableColumns) ? page.tableColumns : [],
+  };
+}
+
+/**
+ * Creates a map of page settings keyed by page slug.
+ */
+export function readGeneralPageSettingsMap(): Record<string, GeneralPageRule> {
+  const settings = readGeneralSettings();
+  if (!settings) {
+    return {};
+  }
+
+  return Object.fromEntries(settings.pages.map((page) => [page.slug, page]));
+}
+
+/**
+ * Returns whether the page is enabled, defaulting to true when not configured.
+ */
+export function isPageEnabled(page: GeneralPageRule | null): boolean {
+  if (!page) {
+    return true;
+  }
+
+  return page.isEnabled;
+}
+
+/**
+ * Returns whether the page should appear in navigation, defaulting to true when not configured.
+ */
+export function isPageShownInNavigation(page: GeneralPageRule | null): boolean {
+  if (!page) {
+    return true;
+  }
+
+  return page.showInNavigation;
 }
 
 /**

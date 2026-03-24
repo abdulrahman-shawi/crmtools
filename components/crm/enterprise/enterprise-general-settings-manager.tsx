@@ -7,6 +7,7 @@ import { AppModal } from "@/components/ui/app-modal";
 import { Button } from "@/components/ui/button";
 import DynamicCard from "@/components/ui/dynamicCard";
 import { SectionHeader } from "@/components/ui/section-header";
+import { GENERAL_SETTINGS_UPDATED_EVENT } from "@/lib/crm-general-settings";
 
 type FieldType = "text" | "number" | "date" | "email" | "phone" | "textarea" | "select";
 
@@ -287,6 +288,7 @@ export function EnterpriseGeneralSettingsManager() {
     };
 
     window.localStorage.setItem(GENERAL_SETTINGS_STORAGE_KEY, JSON.stringify(next));
+    window.dispatchEvent(new Event(GENERAL_SETTINGS_UPDATED_EVENT));
     setSettings(next);
     toast.success("تم حفظ الإعدادات العامة بنجاح");
   }
@@ -299,6 +301,7 @@ export function EnterpriseGeneralSettingsManager() {
     setSettings(defaultState);
     if (typeof window !== "undefined") {
       window.localStorage.setItem(GENERAL_SETTINGS_STORAGE_KEY, JSON.stringify(defaultState));
+      window.dispatchEvent(new Event(GENERAL_SETTINGS_UPDATED_EVENT));
     }
     toast.success("تمت استعادة الإعدادات الافتراضية");
   }

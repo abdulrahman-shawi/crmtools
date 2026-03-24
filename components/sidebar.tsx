@@ -1,6 +1,7 @@
 "use client";
 import { useAuth } from "@/context/AuthContext";
 import { hasAnyPermission } from "@/lib/utils";
+import { GENERAL_SETTINGS_UPDATED_EVENT, isPageEnabled, isPageShownInNavigation, readGeneralPageSettingsMap } from "@/lib/crm-general-settings";
 import { 
   BarChart2, Users, ChevronRight, ChevronLeft,
   Download,
@@ -38,6 +39,7 @@ type MenuItem = {
   icon: any;
   label: string;
   href: string;
+  slug?: string;
 };
 
 type MenuGroup = {
@@ -58,6 +60,7 @@ export const Sidebar = ({ isCollapsed, setIsCollapsed }: { isCollapsed: boolean;
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [canInstall, setCanInstall] = useState(false);
   const [isIOS, setIsIOS] = useState(false);
+  const [crmPageSettingsMap, setCrmPageSettingsMap] = useState<Record<string, { isEnabled: boolean; showInNavigation: boolean }>>({});
 
   // التقاط beforeinstallprompt event والكشف عن iOS
   useEffect(() => {
@@ -75,6 +78,56 @@ export const Sidebar = ({ isCollapsed, setIsCollapsed }: { isCollapsed: boolean;
     window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
     return () => window.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
   }, []);
+
+  useEffect(() => {
+    const applySettings = () => {
+      const pageMap = readGeneralPageSettingsMap();
+      const slimMap = Object.fromEntries(
+        Object.entries(pageMap).map(([slug, page]) => [
+          slug,
+          {
+            isEnabled: isPageEnabled(page),
+            showInNavigation: isPageShownInNavigation(page),
+          },
+        ])
+      );
+      setCrmPageSettingsMap(slimMap);
+    };
+
+    applySettings();
+    window.addEventListener("storage", applySettings);
+    window.addEventListener(GENERAL_SETTINGS_UPDATED_EVENT, applySettings);
+
+    return () => {
+      window.removeEventListener("storage", applySettings);
+      window.removeEventListener(GENERAL_SETTINGS_UPDATED_EVENT, applySettings);
+    };
+  }, []);
+
+  const crmEnterpriseItems: MenuItem[] = [
+    { icon: LayoutGrid, label: "نظرة عامة CRM", href: "/dashboard/crm-enterprise" },
+    { icon: Building2, label: "إضافة العملاء", href: "/dashboard/crm-enterprise/customers", slug: "customers" },
+    { icon: Boxes, label: "المنتجات و التصنيفات", href: "/dashboard/crm-enterprise/products", slug: "products" },
+    { icon: ClipboardList, label: "الطلبات", href: "/dashboard/crm-enterprise/orders", slug: "orders" },
+    { icon: Receipt, label: "المصاريف", href: "/dashboard/crm-enterprise/expenses", slug: "expenses" },
+    { icon: WalletCards, label: "حركة الصندوق", href: "/dashboard/crm-enterprise/cash-movements", slug: "cash-movements" },
+    { icon: Warehouse, label: "المخازن", href: "/dashboard/crm-enterprise/warehouses", slug: "warehouses" },
+    { icon: Truck, label: "شركات الشحن", href: "/dashboard/crm-enterprise/shipping-companies", slug: "shipping-companies" },
+    { icon: KanbanSquare, label: "الفرص البيعية", href: "/dashboard/crm-enterprise/opportunities", slug: "opportunities" },
+    { icon: Undo2, label: "المرتجعات", href: "/dashboard/crm-enterprise/returns", slug: "returns" },
+    { icon: ListTodo, label: "مهام الفرق", href: "/dashboard/crm-enterprise/tasks", slug: "tasks" },
+    { icon: Settings2, label: "الإعدادات العامة", href: "/dashboard/crm-enterprise/settings", slug: "settings" },
+  ].filter((item) => {
+    if (!item.slug) {
+      return true;
+    }
+    const page = crmPageSettingsMap[item.slug];
+    if (!page) {
+      return true;
+    }
+
+    return page.isEnabled && page.showInNavigation;
+  });
 
   const handleInstallApp = async () => {
     if (!deferredPrompt) {
@@ -150,20 +203,7 @@ export const Sidebar = ({ isCollapsed, setIsCollapsed }: { isCollapsed: boolean;
     },
     {
       group: "CRM متقدم",
-      items: [
-        { icon: LayoutGrid, label: "نظرة عامة CRM", href: "/dashboard/crm-enterprise" },
-        { icon: Building2, label: "إضافة العملاء", href: "/dashboard/crm-enterprise/customers" },
-        { icon: Boxes, label: "المنتجات و التصنيفات", href: "/dashboard/crm-enterprise/products" },
-        { icon: ClipboardList, label: "الطلبات", href: "/dashboard/crm-enterprise/orders" },
-        { icon: Receipt, label: "المصاريف", href: "/dashboard/crm-enterprise/expenses" },
-        { icon: WalletCards, label: "حركة الصندوق", href: "/dashboard/crm-enterprise/cash-movements" },
-        { icon: Warehouse, label: "المخازن", href: "/dashboard/crm-enterprise/warehouses" },
-        { icon: Truck, label: "شركات الشحن", href: "/dashboard/crm-enterprise/shipping-companies" },
-        { icon: KanbanSquare, label: "الفرص البيعية", href: "/dashboard/crm-enterprise/opportunities" },
-        { icon: Undo2, label: "المرتجعات", href: "/dashboard/crm-enterprise/returns" },
-        { icon: ListTodo, label: "مهام الفرق", href: "/dashboard/crm-enterprise/tasks" },
-        { icon: Settings2, label: "الإعدادات العامة", href: "/dashboard/crm-enterprise/settings" },
-      ],
+      items: crmEnterpriseItems,
     },
   ].filter(group => group.items.length > 0) : [];
 
