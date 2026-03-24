@@ -85,6 +85,8 @@ export function EnterpriseWarehouseMovementsManager() {
   const [transferFormState, setTransferFormState] = useState<TransferFormState>(initialTransferFormState);
   const [inventoryPage, setInventoryPage] = useState(1);
   const [movementsPage, setMovementsPage] = useState(1);
+  const [productSearchQuery, setProductSearchQuery] = useState("");
+  const [showProductDropdown, setShowProductDropdown] = useState(false);
 
   // Load warehouses from localStorage
   useEffect(() => {
@@ -183,11 +185,36 @@ export function EnterpriseWarehouseMovementsManager() {
     });
   }, [warehouses, products]);
 
+  // Filter products based on search query
+  const filteredProducts = useMemo(() => {
+    if (!productSearchQuery.trim()) {
+      return products;
+    }
+    return products.filter(
+      (product) =>
+        product.productName.toLowerCase().includes(productSearchQuery.toLowerCase()) ||
+        product.categoryName.toLowerCase().includes(productSearchQuery.toLowerCase())
+    );
+  }, [products, productSearchQuery]);
+
   /**
    * Gets product details including name and warehouse allocations.
    */
   function getProductDetails(productId: string) {
     return products.find((p) => p.id === productId);
+  }
+
+  /**
+   * Handles product selection from search dropdown.
+   */
+  function handleSelectProduct(productId: string) {
+    setTransferFormState((prev) => ({
+      ...prev,
+      productId,
+      fromWarehouseId: "",
+    }));
+    setProductSearchQuery("");
+    setShowProductDropdown(false);
   }
 
   /**
@@ -492,30 +519,53 @@ export function EnterpriseWarehouseMovementsManager() {
         onClose={() => {
           setIsTransferModalOpen(false);
           setTransferFormState(initialTransferFormState);
+          setProductSearchQuery("");
+          setShowProductDropdown(false);
         }}
       >
         <div className="space-y-4">
-          {/* Product Selection */}
-          <div>
+          {/* Product Selection with Search */}
+          <div className="relative">
             <label className="block text-sm font-semibold text-slate-800 mb-2">المنتج</label>
-            <select
-              value={transferFormState.productId}
-              onChange={(event) =>
-                setTransferFormState((prev) => ({
-                  ...prev,
-                  productId: event.target.value,
-                  fromWarehouseId: "",
-                }))
-              }
+            <input
+              type="text"
+              placeholder="ابحث عن المنتج..."
+              value={productSearchQuery}
+              onChange={(event) => {
+                setProductSearchQuery(event.target.value);
+                setShowProductDropdown(true);
+              }}
+              onFocus={() => setShowProductDropdown(true)}
               className="w-full h-10 rounded-lg border border-slate-200 px-3 text-sm"
-            >
-              <option value="">اختر المنتج</option>
-              {products.map((product) => (
-                <option key={product.id} value={product.id}>
-                  {product.productName} ({product.categoryName})
-                </option>
-              ))}
-            </select>
+            />
+            
+            {/* Dropdown List */}
+            {showProductDropdown && (
+              <div className="absolute top-full left-0 right-0 z-50 mt-1 rounded-lg border border-slate-200 bg-white shadow-lg max-h-64 overflow-y-auto">
+                {filteredProducts.length === 0 ? (
+                  <div className="p-3 text-center text-sm text-slate-500">لا توجد منتجات مطابقة</div>
+                ) : (
+                  filteredProducts.map((product) => (
+                    <button
+                      key={product.id}
+                      type="button"
+                      onClick={() => handleSelectProduct(product.id)}
+                      className="w-full text-right px-3 py-2 hover:bg-blue-50 transition-colors border-b border-slate-100 last:border-b-0"
+                    >
+                      <div className="text-sm font-medium text-slate-800">{product.productName}</div>
+                      <div className="text-xs text-slate-500">{product.categoryName}</div>
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
+
+            {/* Show selected product */}
+            {transferFormState.productId && !productSearchQuery && (
+              <div className="mt-2 text-sm text-blue-600">
+                ✓ المنتج المختار: {getProductDetails(transferFormState.productId)?.productName}
+              </div>
+            )}
           </div>
 
           {/* Source Warehouse Selection */}
