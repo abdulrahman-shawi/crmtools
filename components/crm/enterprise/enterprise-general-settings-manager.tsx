@@ -235,6 +235,7 @@ function clonePage(page: PageRule): PageRule {
 export function EnterpriseGeneralSettingsManager() {
   const [settings, setSettings] = useState<WebsiteGeneralSettings>(createDefaultSettings);
   const [isHydrated, setIsHydrated] = useState(false);
+  const [hasLoadedSettings, setHasLoadedSettings] = useState(false);
   const [isPageModalOpen, setIsPageModalOpen] = useState(false);
   const [editingPageId, setEditingPageId] = useState<string | null>(null);
   const [editingPage, setEditingPage] = useState<PageRule | null>(null);
@@ -256,8 +257,18 @@ export function EnterpriseGeneralSettingsManager() {
       toast.error("تعذر تحميل إعدادات الموقع، تم استخدام القيم الافتراضية");
     } finally {
       setIsHydrated(true);
+      setHasLoadedSettings(true);
     }
   }, []);
+
+  useEffect(() => {
+    if (!hasLoadedSettings || typeof window === "undefined") {
+      return;
+    }
+
+    window.localStorage.setItem(GENERAL_SETTINGS_STORAGE_KEY, JSON.stringify(settings));
+    window.dispatchEvent(new Event(GENERAL_SETTINGS_UPDATED_EVENT));
+  }, [settings, hasLoadedSettings]);
 
   const enabledPagesCount = useMemo(
     () => settings.pages.filter((page) => page.isEnabled).length,
@@ -278,18 +289,10 @@ export function EnterpriseGeneralSettingsManager() {
    * Persists current settings in browser localStorage.
    */
   function handleSaveSettings() {
-    if (typeof window === "undefined") {
-      return;
-    }
-
-    const next = {
-      ...settings,
+    setSettings((prev) => ({
+      ...prev,
       updatedAt: new Date().toISOString(),
-    };
-
-    window.localStorage.setItem(GENERAL_SETTINGS_STORAGE_KEY, JSON.stringify(next));
-    window.dispatchEvent(new Event(GENERAL_SETTINGS_UPDATED_EVENT));
-    setSettings(next);
+    }));
     toast.success("تم حفظ الإعدادات العامة بنجاح");
   }
 
@@ -299,10 +302,6 @@ export function EnterpriseGeneralSettingsManager() {
   function handleResetSettings() {
     const defaultState = createDefaultSettings();
     setSettings(defaultState);
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem(GENERAL_SETTINGS_STORAGE_KEY, JSON.stringify(defaultState));
-      window.dispatchEvent(new Event(GENERAL_SETTINGS_UPDATED_EVENT));
-    }
     toast.success("تمت استعادة الإعدادات الافتراضية");
   }
 
@@ -370,6 +369,7 @@ export function EnterpriseGeneralSettingsManager() {
     setSettings((prev) => ({
       ...prev,
       pages: prev.pages.map((page) => (page.id === editingPageId ? editingPage : page)),
+      updatedAt: new Date().toISOString(),
     }));
 
     setIsPageModalOpen(false);
