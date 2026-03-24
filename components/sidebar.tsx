@@ -151,8 +151,6 @@ export const Sidebar = ({ isCollapsed, setIsCollapsed }: { isCollapsed: boolean;
         { icon: LayoutGrid, label: "نظرة عامة CRM", href: "/dashboard/crm-enterprise" },
         { icon: Building2, label: "إضافة العملاء", href: "/dashboard/crm-enterprise/customers" },
         { icon: Boxes, label: "إضافة المنتجات", href: "/dashboard/crm-enterprise/products" },
-        { icon: Activity, label: "حالة العملاء", href: "/dashboard/crm-enterprise/customer-status" },
-        { icon: Tags, label: "التصنيفات", href: "/dashboard/crm-enterprise/categories" },
         { icon: ClipboardList, label: "الطلبات", href: "/dashboard/crm-enterprise/orders" },
         { icon: Receipt, label: "المصاريف", href: "/dashboard/crm-enterprise/expenses" },
         { icon: WalletCards, label: "حركة الصندوق", href: "/dashboard/crm-enterprise/cash-movements" },
