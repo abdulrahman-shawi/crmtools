@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Eye, Truck } from "lucide-react";
+import { Eye, MessageCircle, Share2, Truck } from "lucide-react";
 import toast from "react-hot-toast";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { AppModal } from "@/components/ui/app-modal";
@@ -206,6 +206,20 @@ export function EnterpriseOrdersManager() {
             </button>
             <button
               type="button"
+              onClick={() => shareInvoiceOnWhatsApp(row)}
+              className="inline-flex items-center gap-1 rounded-md border border-green-200 px-2 py-1 text-xs text-green-700 hover:bg-green-50"
+            >
+              <MessageCircle className="h-3.5 w-3.5" /> واتساب
+            </button>
+            <button
+              type="button"
+              onClick={() => shareInvoiceGeneric(row)}
+              className="inline-flex items-center gap-1 rounded-md border border-violet-200 px-2 py-1 text-xs text-violet-700 hover:bg-violet-50"
+            >
+              <Share2 className="h-3.5 w-3.5" /> مشاركة
+            </button>
+            <button
+              type="button"
               onClick={() => openShippingModal(row)}
               className="inline-flex items-center gap-1 rounded-md border border-emerald-200 px-2 py-1 text-xs text-emerald-700 hover:bg-emerald-50"
             >
@@ -217,6 +231,104 @@ export function EnterpriseOrdersManager() {
     ],
     [orders]
   );
+
+  /**
+   * Builds details page URL for the invoice.
+   */
+  function getInvoiceUrl(invoiceId: string): string {
+    if (typeof window === "undefined") {
+      return `/dashboard/crm-enterprise/invoices/${invoiceId}`;
+    }
+
+    return `${window.location.origin}/dashboard/crm-enterprise/invoices/${invoiceId}`;
+  }
+
+  /**
+   * Produces a sales invoice text in a common printable/shareable format.
+   */
+  function buildSalesInvoiceText(order: SalesOrder): string {
+    const invoice = invoices.find((item) => item.id === order.invoiceId);
+    const lines = invoice?.items ?? [];
+    const subtotal = invoice?.subtotal ?? order.total;
+    const discountAmount = invoice?.discountAmount ?? 0;
+    const taxAmount = invoice?.taxAmount ?? 0;
+    const totalBeforeShipping = invoice?.total ?? order.total;
+    const grandTotal = totalBeforeShipping + order.shippingCost;
+    const invoiceUrl = getInvoiceUrl(order.invoiceId);
+
+    const itemsText =
+      lines.length > 0
+        ? lines
+            .map((line, index) => {
+              const lineTotal = line.price * line.quantity;
+              return `${index + 1}) ${line.name} | ${line.sku} | ${line.quantity} x ${line.price.toLocaleString()} = ${lineTotal.toLocaleString()}`;
+            })
+            .join("\n")
+        : "لا توجد بنود مفصلة";
+
+    return [
+      "فاتورة مبيعات",
+      `رقم الفاتورة: ${order.invoiceNo}`,
+      `رقم الطلب: ${order.orderNo}`,
+      `التاريخ: ${order.date}`,
+      `العميل: ${order.customerName}`,
+      `المستلم: ${order.receiverName || "-"}`,
+      `الجوال: ${order.receiverPhone || "-"}`,
+      `المدينة: ${order.receiverCity || "-"}`,
+      `طريقة الدفع: ${paymentMethodLabel[order.paymentMethod]}`,
+      "",
+      "بنود الفاتورة:",
+      itemsText,
+      "",
+      `المجموع الفرعي: ${subtotal.toLocaleString()}`,
+      `الخصم: ${discountAmount.toLocaleString()}`,
+      `الضريبة: ${taxAmount.toLocaleString()}`,
+      `الشحن: ${order.shippingCost.toLocaleString()}`,
+      `الإجمالي النهائي: ${grandTotal.toLocaleString()}`,
+      `المستلم: ${order.receivedAmount.toLocaleString()}`,
+      `المتبقي: ${order.remainingAmount.toLocaleString()}`,
+      "",
+      `رابط الفاتورة: ${invoiceUrl}`,
+    ].join("\n");
+  }
+
+  /**
+   * Shares invoice via WhatsApp with prefilled standard sales invoice text.
+   */
+  function shareInvoiceOnWhatsApp(order: SalesOrder) {
+    const shareText = buildSalesInvoiceText(order);
+    const cleanedPhone = (order.receiverPhone || "").replace(/[^\d]/g, "");
+    const encoded = encodeURIComponent(shareText);
+    const whatsappUrl = cleanedPhone
+      ? `https://wa.me/${cleanedPhone}?text=${encoded}`
+      : `https://wa.me/?text=${encoded}`;
+
+    window.open(whatsappUrl, "_blank", "noopener,noreferrer");
+    toast.success("تم تجهيز مشاركة الفاتورة عبر واتساب");
+  }
+
+  /**
+   * Shares invoice using Web Share API or clipboard fallback.
+   */
+  async function shareInvoiceGeneric(order: SalesOrder) {
+    const text = buildSalesInvoiceText(order);
+
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: `فاتورة ${order.invoiceNo}`,
+          text,
+          url: getInvoiceUrl(order.invoiceId),
+        });
+        return;
+      }
+
+      await navigator.clipboard.writeText(text);
+      toast.success("تم نسخ نص الفاتورة للمشاركة");
+    } catch {
+      toast.error("تعذر مشاركة الفاتورة");
+    }
+  }
 
   /**
    * Updates order status from table select.
@@ -386,6 +498,66 @@ export function EnterpriseOrdersManager() {
               ) : (
                 <p className="text-sm text-slate-500">لا توجد بنود فاتورة مرتبطة.</p>
               )}
+            </div>
+
+            <div className="rounded-lg border-2 border-slate-300 bg-white p-4">
+              <div className="mb-3 flex items-center justify-between border-b border-slate-200 pb-3">
+                <div>
+                  <p className="text-base font-bold text-slate-900">فاتورة مبيعات</p>
+                  <p className="text-xs text-slate-500">Sales Invoice</p>
+                </div>
+                <div className="text-left text-xs text-slate-600">
+                  <p>Invoice No: {detailsOrder.invoiceNo}</p>
+                  <p>Order No: {detailsOrder.orderNo}</p>
+                  <p>Date: {detailsOrder.date}</p>
+                </div>
+              </div>
+
+              <div className="mb-3 grid gap-2 rounded-lg border border-slate-200 p-3 text-sm md:grid-cols-2">
+                <p>Customer: <span className="font-semibold">{detailsOrder.customerName}</span></p>
+                <p>Receiver: <span className="font-semibold">{detailsOrder.receiverName || "-"}</span></p>
+                <p>Phone: <span className="font-semibold">{detailsOrder.receiverPhone || "-"}</span></p>
+                <p>City: <span className="font-semibold">{detailsOrder.receiverCity || "-"}</span></p>
+                <p>Payment: <span className="font-semibold">{paymentMethodLabel[detailsOrder.paymentMethod]}</span></p>
+                <p>Shipping: <span className="font-semibold">{detailsOrder.shippingCompanyName || "غير محددة"}</span></p>
+              </div>
+
+              <div className="overflow-x-auto rounded-lg border border-slate-200">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-slate-50">
+                    <tr>
+                      <th className="p-2 text-right font-semibold text-slate-700">الوصف</th>
+                      <th className="p-2 text-right font-semibold text-slate-700">الكمية</th>
+                      <th className="p-2 text-right font-semibold text-slate-700">السعر</th>
+                      <th className="p-2 text-right font-semibold text-slate-700">الإجمالي</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {detailsInvoice?.items?.length ? (
+                      detailsInvoice.items.map((item) => (
+                        <tr key={item.id} className="border-t border-slate-100">
+                          <td className="p-2">{item.name}</td>
+                          <td className="p-2">{item.quantity}</td>
+                          <td className="p-2">{item.price.toLocaleString()}</td>
+                          <td className="p-2 font-semibold">{(item.price * item.quantity).toLocaleString()}</td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={4} className="p-3 text-center text-slate-500">لا توجد بنود فاتورة</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="mt-3 grid gap-2 rounded-lg bg-slate-50 p-3 text-sm md:grid-cols-2">
+                <p>Subtotal: <span className="font-semibold">{(detailsInvoice?.subtotal ?? detailsOrder.total).toLocaleString()}</span></p>
+                <p>Discount: <span className="font-semibold">{(detailsInvoice?.discountAmount ?? 0).toLocaleString()}</span></p>
+                <p>Tax: <span className="font-semibold">{(detailsInvoice?.taxAmount ?? 0).toLocaleString()}</span></p>
+                <p>Shipping: <span className="font-semibold">{detailsOrder.shippingCost.toLocaleString()}</span></p>
+                <p className="md:col-span-2">Grand Total: <span className="font-bold text-emerald-700">{((detailsInvoice?.total ?? detailsOrder.total) + detailsOrder.shippingCost).toLocaleString()}</span></p>
+              </div>
             </div>
           </div>
         ) : null}
