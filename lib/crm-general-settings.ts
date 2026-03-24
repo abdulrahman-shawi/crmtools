@@ -6,6 +6,7 @@ export interface GeneralFieldRule {
   key: string;
   label: string;
   type: string;
+  options?: string[];
   isRequired: boolean;
   isVisible: boolean;
 }

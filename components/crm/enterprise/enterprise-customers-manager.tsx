@@ -40,6 +40,7 @@ interface EnterpriseCustomer {
   lastCommunication: string;
   nextFollowUp: string;
   notes: string;
+  customFields?: Record<string, string>;
 }
 
 interface CustomerCommunication {
@@ -226,6 +227,23 @@ const countryOptions: Array<{ code: CountryCode; label: string }> = [
   { code: "EG", label: "مصر" },
   { code: "JO", label: "الأردن" },
 ];
+
+const BUILTIN_CUSTOMER_FORM_KEYS = new Set([
+  "companyName",
+  "companySize",
+  "industry",
+  "contactPersons",
+  "country",
+  "city",
+  "phone",
+  "email",
+  "status",
+  "tier",
+  "annualValue",
+  "lastCommunication",
+  "nextFollowUp",
+  "notes",
+]);
 
 /**
  * Converts unknown numeric input to a safe number with fallback.
@@ -569,6 +587,7 @@ export function EnterpriseCustomersManager() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formState, setFormState] = useState<CustomerFormState>(initialFormState);
+  const [customFieldValues, setCustomFieldValues] = useState<Record<string, string>>({});
   const [isCommunicationModalOpen, setIsCommunicationModalOpen] = useState(false);
 
     const { user } = useAuth();
@@ -767,6 +786,14 @@ export function EnterpriseCustomersManager() {
     [salesOrders, historyCustomerId]
   );
 
+  const customVisibleFields = useMemo(
+    () =>
+      (pageSettings?.fields ?? []).filter(
+        (field) => field.isVisible && !BUILTIN_CUSTOMER_FORM_KEYS.has(field.key)
+      ),
+    [pageSettings]
+  );
+
   const previewInvoice = useMemo(
     () => salesInvoices.find((invoice) => invoice.id === previewInvoiceId) ?? null,
     [salesInvoices, previewInvoiceId]
@@ -889,6 +916,7 @@ export function EnterpriseCustomersManager() {
     }
     setEditingId(null);
     setFormState(initialFormState);
+    setCustomFieldValues({});
     setIsModalOpen(true);
   }
 
@@ -917,7 +945,18 @@ export function EnterpriseCustomersManager() {
       nextFollowUp: customer.nextFollowUp,
       notes: customer.notes,
     });
+    setCustomFieldValues(customer.customFields ?? {});
     setIsModalOpen(true);
+  }
+
+  /**
+   * Updates value for one dynamic custom field.
+   */
+  function handleCustomFieldChange(fieldKey: string, value: string) {
+    setCustomFieldValues((prev) => ({
+      ...prev,
+      [fieldKey]: value,
+    }));
   }
 
   /**
@@ -1228,6 +1267,18 @@ export function EnterpriseCustomersManager() {
       }
     }
 
+    for (const field of customVisibleFields) {
+      if (!field.isRequired) {
+        continue;
+      }
+
+      const value = customFieldValues[field.key];
+      if (!value || !value.trim()) {
+        toast.error(`الحقل ${field.label} مطلوب`);
+        return;
+      }
+    }
+
     if (
       !formState.companyName.trim() ||
       formState.contactPersons.length === 0 ||
@@ -1260,6 +1311,7 @@ export function EnterpriseCustomersManager() {
       lastCommunication: formState.lastCommunication.trim(),
       nextFollowUp: formState.nextFollowUp,
       notes: formState.notes.trim(),
+      customFields: customFieldValues,
     };
 
     if (editingId) {
@@ -1273,6 +1325,7 @@ export function EnterpriseCustomersManager() {
     setIsModalOpen(false);
     setEditingId(null);
     setFormState(initialFormState);
+    setCustomFieldValues({});
   }
 
   /**
@@ -1410,7 +1463,8 @@ export function EnterpriseCustomersManager() {
                 .map((order) => `${order.orderNo} ${order.total} ${order.date}`)
                 .join(" ");
 
-              return `${customer.companyName} ${sizeLabel[customer.companySize]} ${customer.industry} ${customer.contactPersons.join(" ")} ${customer.city} ${customer.country} ${customer.phone} ${statusLabel[customer.status].label} ${tierLabel[customer.tier].label} ${customer.lastCommunication} ${customer.notes} ${communicationText} ${invoiceText} ${orderText}`;
+              const customFieldsText = Object.values(customer.customFields ?? {}).join(" ");
+              return `${customer.companyName} ${sizeLabel[customer.companySize]} ${customer.industry} ${customer.contactPersons.join(" ")} ${customer.city} ${customer.country} ${customer.phone} ${statusLabel[customer.status].label} ${tierLabel[customer.tier].label} ${customer.lastCommunication} ${customer.notes} ${customFieldsText} ${communicationText} ${invoiceText} ${orderText}`;
             }}
           />
         </DynamicCard.Content>
@@ -1553,6 +1607,59 @@ export function EnterpriseCustomersManager() {
             value={formState.notes}
             onChange={(event) => setFormState((prev) => ({ ...prev, notes: event.target.value }))}
           />
+          {customVisibleFields.map((field) => {
+            if (field.type === "textarea") {
+              return (
+                <textarea
+                  key={field.id}
+                  className="min-h-[90px] rounded-lg border border-slate-200 px-3 py-2 text-sm md:col-span-2"
+                  placeholder={field.label}
+                  value={customFieldValues[field.key] ?? ""}
+                  onChange={(event) => handleCustomFieldChange(field.key, event.target.value)}
+                />
+              );
+            }
+
+            if (field.type === "select") {
+              return (
+                <select
+                  key={field.id}
+                  className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
+                  value={customFieldValues[field.key] ?? ""}
+                  onChange={(event) => handleCustomFieldChange(field.key, event.target.value)}
+                >
+                  <option value="">اختر {field.label}</option>
+                  {(field.options ?? []).map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              );
+            }
+
+            const htmlInputType: "text" | "number" | "date" | "email" | "tel" =
+              field.type === "number"
+                ? "number"
+                : field.type === "date"
+                  ? "date"
+                  : field.type === "email"
+                    ? "email"
+                    : field.type === "phone"
+                      ? "tel"
+                      : "text";
+
+            return (
+              <input
+                key={field.id}
+                type={htmlInputType}
+                className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
+                placeholder={field.label}
+                value={customFieldValues[field.key] ?? ""}
+                onChange={(event) => handleCustomFieldChange(field.key, event.target.value)}
+              />
+            );
+          })}
         </div>
       </AppModal>
 

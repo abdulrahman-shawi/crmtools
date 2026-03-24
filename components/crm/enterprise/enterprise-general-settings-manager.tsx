@@ -24,6 +24,7 @@ interface FieldRule {
   key: string;
   label: string;
   type: FieldType;
+  options?: string[];
   isRequired: boolean;
   isVisible: boolean;
 }
@@ -410,6 +411,7 @@ export function EnterpriseGeneralSettingsManager() {
             key: "newField",
             label: "حقل جديد",
             type: "text",
+            options: [],
             isRequired: false,
             isVisible: true,
           },
@@ -764,6 +766,7 @@ export function EnterpriseGeneralSettingsManager() {
                           updateEditingField(field.id, (prev) => ({
                             ...prev,
                             type: event.target.value as FieldType,
+                            options: event.target.value === "select" ? prev.options ?? [] : [],
                           }))
                         }
                       >
@@ -773,6 +776,22 @@ export function EnterpriseGeneralSettingsManager() {
                           </option>
                         ))}
                       </select>
+                      {field.type === "select" && (
+                        <input
+                          className="h-9 rounded-md border border-slate-200 px-2 text-sm md:col-span-2"
+                          value={(field.options ?? []).join(",")}
+                          onChange={(event) =>
+                            updateEditingField(field.id, (prev) => ({
+                              ...prev,
+                              options: event.target.value
+                                .split(",")
+                                .map((item) => item.trim())
+                                .filter(Boolean),
+                            }))
+                          }
+                          placeholder="خيارات select مفصولة بفاصلة، مثال: جديد,نشط,مجمّد"
+                        />
+                      )}
                       <div className="flex items-center gap-3 text-sm">
                         <label className="inline-flex items-center gap-2">
                           <input
