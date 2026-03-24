@@ -812,7 +812,7 @@ export function EnterpriseCustomersManager() {
   const orderDynamicFields = useMemo(
     () =>
       (ordersPageSettings?.fields ?? []).filter(
-        (field) => field.isVisible && !BUILTIN_ORDER_FIELD_KEYS.has(field.key)
+        (field) => field.isVisible !== false && !BUILTIN_ORDER_FIELD_KEYS.has(field.key)
       ),
     [ordersPageSettings]
   );

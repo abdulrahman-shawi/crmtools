@@ -305,7 +305,7 @@ export function EnterpriseOrdersManager() {
   const dynamicOrderFields = useMemo(
     () =>
       (pageSettings?.fields ?? []).filter(
-        (field) => field.isVisible && !BUILTIN_ORDER_FIELD_KEYS.has(field.key)
+        (field) => field.isVisible !== false && !BUILTIN_ORDER_FIELD_KEYS.has(field.key)
       ),
     [pageSettings]
   );
@@ -313,7 +313,7 @@ export function EnterpriseOrdersManager() {
   const dynamicOrderColumns = useMemo(
     () =>
       (pageSettings?.tableColumns ?? []).filter(
-        (column) => column.isVisible && !BUILTIN_ORDER_COLUMN_KEYS.has(column.key)
+        (column) => column.isVisible !== false && !BUILTIN_ORDER_COLUMN_KEYS.has(column.key)
       ),
     [pageSettings]
   );
