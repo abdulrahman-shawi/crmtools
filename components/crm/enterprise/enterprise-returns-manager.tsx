@@ -10,6 +10,15 @@ import { AppModal } from "@/components/ui/app-modal";
 import { Button } from "@/components/ui/button";
 import DynamicCard from "@/components/ui/dynamicCard";
 import { SectionHeader } from "@/components/ui/section-header";
+import {
+  GENERAL_SETTINGS_UPDATED_EVENT,
+  getColumnLabel,
+  getFieldLabel,
+  isColumnVisible,
+  isFieldRequired,
+  readGeneralPageSettings,
+  type GeneralPageRule,
+} from "@/lib/crm-general-settings";
 
 type ReturnType = "damaged" | "replacement" | "refund";
 type ReturnStage = "received" | "inspection" | "maintenance" | "delivered";
@@ -188,10 +197,26 @@ export function EnterpriseReturnsManager() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formState, setFormState] = useState<ReturnFormState>(createInitialFormState);
+  const [pageSettings, setPageSettings] = useState<GeneralPageRule | null>(null);
   const [productSearchQuery, setProductSearchQuery] = useState("");
   const [showProductDropdown, setShowProductDropdown] = useState(false);
   const [replacementNewSearchQuery, setReplacementNewSearchQuery] = useState("");
   const [showReplacementNewDropdown, setShowReplacementNewDropdown] = useState(false);
+
+  useEffect(() => {
+    const applySettings = () => {
+      setPageSettings(readGeneralPageSettings("returns"));
+    };
+
+    applySettings();
+    window.addEventListener("storage", applySettings);
+    window.addEventListener(GENERAL_SETTINGS_UPDATED_EVENT, applySettings);
+
+    return () => {
+      window.removeEventListener("storage", applySettings);
+      window.removeEventListener(GENERAL_SETTINGS_UPDATED_EVENT, applySettings);
+    };
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -296,17 +321,20 @@ export function EnterpriseReturnsManager() {
   }, [rows]);
 
   const columns = useMemo<Column<ReturnRecord>[]>(
-    () => [
+    () => {
+      const baseColumns: Array<Column<ReturnRecord> & { keyName: string }> = [
       {
-        header: "نوع المرتجع",
+        keyName: "returnType",
+        header: getColumnLabel(pageSettings, "returnType", "نوع المرتجع"),
         accessor: (row) => returnTypeLabel[row.returnType],
       },
-      { header: "المنتج", accessor: "productName" },
-      { header: "الكمية المرتجعة", accessor: "returnedQuantity" },
-      { header: "سبب المرتجع", accessor: "reason" },
-      { header: "العميل", accessor: "customer" },
+      { keyName: "productName", header: getColumnLabel(pageSettings, "productName", "المنتج"), accessor: "productName" },
+      { keyName: "returnedQuantity", header: getColumnLabel(pageSettings, "returnedQuantity", "الكمية المرتجعة"), accessor: "returnedQuantity" },
+      { keyName: "reason", header: getColumnLabel(pageSettings, "reason", "سبب المرتجع"), accessor: "reason" },
+      { keyName: "customer", header: getColumnLabel(pageSettings, "customer", "العميل"), accessor: "customer" },
       {
-        header: "مرحلة المرتجع",
+        keyName: "stage",
+        header: getColumnLabel(pageSettings, "stage", "مرحلة المرتجع"),
         accessor: (row) => {
           const progress = getStageProgress(row.returnType, row.stage);
 
@@ -329,7 +357,8 @@ export function EnterpriseReturnsManager() {
         },
       },
       {
-        header: "ملاحظة المرحلة الحالية",
+        keyName: "stageNote",
+        header: getColumnLabel(pageSettings, "stageNote", "ملاحظة المرحلة الحالية"),
         accessor: (row) => (
           <div className="flex min-w-[220px] items-center justify-between gap-2">
             <p className="line-clamp-2 text-xs text-slate-700">{row.stageNotes?.[row.stage] || "-"}</p>
@@ -344,6 +373,7 @@ export function EnterpriseReturnsManager() {
         ),
       },
       {
+        keyName: "actions",
         header: "الإجراءات",
         accessor: (row) => (
           <div className="flex items-center gap-1">
@@ -368,8 +398,17 @@ export function EnterpriseReturnsManager() {
           </div>
         ),
       },
-    ],
-    [canEdit, canDelete]
+    ];
+
+      if (!pageSettings) {
+        return baseColumns.map(({ keyName: _keyName, ...column }) => column);
+      }
+
+      return baseColumns
+        .filter((column) => column.keyName === "actions" || isColumnVisible(pageSettings, column.keyName))
+        .map(({ keyName: _keyName, ...column }) => column);
+    },
+    [canEdit, canDelete, pageSettings]
   );
 
   /**
@@ -451,7 +490,7 @@ export function EnterpriseReturnsManager() {
    * Validates and persists return record.
    */
   function handleSave() {
-    if (!formState.productId || !formState.productName) {
+    if (isFieldRequired(pageSettings, "productName") && (!formState.productId || !formState.productName)) {
       toast.error("اختيار المنتج مطلوب");
       return;
     }
@@ -462,12 +501,12 @@ export function EnterpriseReturnsManager() {
       return;
     }
 
-    if (!formState.reason.trim()) {
+    if (isFieldRequired(pageSettings, "reason") && !formState.reason.trim()) {
       toast.error("سبب المرتجع مطلوب");
       return;
     }
 
-    if (!formState.customer.trim()) {
+    if (isFieldRequired(pageSettings, "customer") && !formState.customer.trim()) {
       toast.error("اسم العميل مطلوب");
       return;
     }
@@ -649,7 +688,7 @@ export function EnterpriseReturnsManager() {
               className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm"
               value={formState.customer}
               onChange={(event) => setFormState((prev) => ({ ...prev, customer: event.target.value }))}
-              placeholder="اسم العميل"
+              placeholder={getFieldLabel(pageSettings, "customer", "اسم العميل")}
             />
           </div>
 
@@ -792,7 +831,7 @@ export function EnterpriseReturnsManager() {
               className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
               value={formState.reason}
               onChange={(event) => setFormState((prev) => ({ ...prev, reason: event.target.value }))}
-              placeholder="اكتب سبب المرتجع..."
+              placeholder={getFieldLabel(pageSettings, "reason", "اكتب سبب المرتجع...")}
             />
           </div>
 

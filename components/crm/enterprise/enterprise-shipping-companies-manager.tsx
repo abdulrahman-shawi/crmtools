@@ -10,6 +10,15 @@ import { AppModal } from "@/components/ui/app-modal";
 import { Button } from "@/components/ui/button";
 import DynamicCard from "@/components/ui/dynamicCard";
 import { SectionHeader } from "@/components/ui/section-header";
+import {
+  GENERAL_SETTINGS_UPDATED_EVENT,
+  getColumnLabel,
+  getFieldLabel,
+  isColumnVisible,
+  isFieldRequired,
+  readGeneralPageSettings,
+  type GeneralPageRule,
+} from "@/lib/crm-general-settings";
 
 interface ShippingCompanyRow {
   id: string;
@@ -67,6 +76,22 @@ export function EnterpriseShippingCompaniesManager() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formState, setFormState] = useState<ShippingCompanyFormState>(initialFormState);
+  const [pageSettings, setPageSettings] = useState<GeneralPageRule | null>(null);
+
+  useEffect(() => {
+    const applySettings = () => {
+      setPageSettings(readGeneralPageSettings("shipping-companies"));
+    };
+
+    applySettings();
+    window.addEventListener("storage", applySettings);
+    window.addEventListener(GENERAL_SETTINGS_UPDATED_EVENT, applySettings);
+
+    return () => {
+      window.removeEventListener("storage", applySettings);
+      window.removeEventListener(GENERAL_SETTINGS_UPDATED_EVENT, applySettings);
+    };
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -107,13 +132,15 @@ export function EnterpriseShippingCompaniesManager() {
   }, [rows]);
 
   const columns = useMemo<Column<ShippingCompanyRow>[]>(
-    () => [
-      { header: "الشركة", accessor: "company" },
-      { header: "الخدمة", accessor: "serviceLevel" },
-      { header: "النطاق", accessor: "region" },
-      { header: "متوسط تكلفة الشحنة", accessor: (row) => row.avgCost.toLocaleString() },
-      { header: "SLA يوم", accessor: "sla" },
+    () => {
+      const baseColumns: Array<Column<ShippingCompanyRow> & { keyName: string }> = [
+      { keyName: "company", header: getColumnLabel(pageSettings, "company", "الشركة"), accessor: "company" },
+      { keyName: "serviceLevel", header: getColumnLabel(pageSettings, "serviceLevel", "الخدمة"), accessor: "serviceLevel" },
+      { keyName: "region", header: getColumnLabel(pageSettings, "region", "النطاق"), accessor: "region" },
+      { keyName: "avgCost", header: getColumnLabel(pageSettings, "avgCost", "متوسط تكلفة الشحنة"), accessor: (row) => row.avgCost.toLocaleString() },
+      { keyName: "sla", header: getColumnLabel(pageSettings, "sla", "SLA يوم"), accessor: "sla" },
       {
+        keyName: "actions",
         header: "الإجراءات",
         accessor: (row) => (
           <div className="flex items-center gap-1">
@@ -138,8 +165,17 @@ export function EnterpriseShippingCompaniesManager() {
           </div>
         ),
       },
-    ],
-    [canEdit, canDelete]
+    ];
+
+      if (!pageSettings) {
+        return baseColumns.map(({ keyName: _keyName, ...column }) => column);
+      }
+
+      return baseColumns
+        .filter((column) => column.keyName === "actions" || isColumnVisible(pageSettings, column.keyName))
+        .map(({ keyName: _keyName, ...column }) => column);
+    },
+    [canEdit, canDelete, pageSettings]
   );
 
   /**
@@ -179,8 +215,18 @@ export function EnterpriseShippingCompaniesManager() {
    * Validates and saves company row.
    */
   function handleSave() {
-    if (!formState.company.trim()) {
+    if (isFieldRequired(pageSettings, "company") && !formState.company.trim()) {
       toast.error("اسم الشركة مطلوب");
+      return;
+    }
+
+    if (isFieldRequired(pageSettings, "serviceLevel") && !formState.serviceLevel.trim()) {
+      toast.error("مستوى الخدمة مطلوب");
+      return;
+    }
+
+    if (isFieldRequired(pageSettings, "region") && !formState.region.trim()) {
+      toast.error("النطاق مطلوب");
       return;
     }
 
@@ -294,19 +340,19 @@ export function EnterpriseShippingCompaniesManager() {
         <div className="grid grid-cols-1 gap-3">
           <input
             className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
-            placeholder="اسم الشركة"
+            placeholder={getFieldLabel(pageSettings, "company", "اسم الشركة")}
             value={formState.company}
             onChange={(event) => setFormState((prev) => ({ ...prev, company: event.target.value }))}
           />
           <input
             className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
-            placeholder="مستوى الخدمة"
+            placeholder={getFieldLabel(pageSettings, "serviceLevel", "مستوى الخدمة")}
             value={formState.serviceLevel}
             onChange={(event) => setFormState((prev) => ({ ...prev, serviceLevel: event.target.value }))}
           />
           <input
             className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
-            placeholder="النطاق"
+            placeholder={getFieldLabel(pageSettings, "region", "النطاق")}
             value={formState.region}
             onChange={(event) => setFormState((prev) => ({ ...prev, region: event.target.value }))}
           />
@@ -314,7 +360,7 @@ export function EnterpriseShippingCompaniesManager() {
             type="number"
             min={0}
             className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
-            placeholder="متوسط تكلفة الشحنة"
+            placeholder={getFieldLabel(pageSettings, "avgCost", "متوسط تكلفة الشحنة")}
             value={formState.avgCost}
             onChange={(event) => setFormState((prev) => ({ ...prev, avgCost: event.target.value }))}
           />
@@ -322,7 +368,7 @@ export function EnterpriseShippingCompaniesManager() {
             type="number"
             min={0}
             className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
-            placeholder="SLA يوم"
+            placeholder={getFieldLabel(pageSettings, "sla", "SLA يوم")}
             value={formState.sla}
             onChange={(event) => setFormState((prev) => ({ ...prev, sla: event.target.value }))}
           />

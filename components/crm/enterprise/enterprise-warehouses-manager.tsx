@@ -10,6 +10,15 @@ import { AppModal } from "@/components/ui/app-modal";
 import { Button } from "@/components/ui/button";
 import DynamicCard from "@/components/ui/dynamicCard";
 import { SectionHeader } from "@/components/ui/section-header";
+import {
+  GENERAL_SETTINGS_UPDATED_EVENT,
+  getColumnLabel,
+  getFieldLabel,
+  isColumnVisible,
+  isFieldRequired,
+  readGeneralPageSettings,
+  type GeneralPageRule,
+} from "@/lib/crm-general-settings";
 
 interface WarehouseRecord {
   id: string;
@@ -116,6 +125,22 @@ export function EnterpriseWarehousesManager() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formState, setFormState] = useState<WarehouseFormState>(initialFormState);
+  const [pageSettings, setPageSettings] = useState<GeneralPageRule | null>(null);
+
+  useEffect(() => {
+    const applySettings = () => {
+      setPageSettings(readGeneralPageSettings("warehouses"));
+    };
+
+    applySettings();
+    window.addEventListener("storage", applySettings);
+    window.addEventListener(GENERAL_SETTINGS_UPDATED_EVENT, applySettings);
+
+    return () => {
+      window.removeEventListener("storage", applySettings);
+      window.removeEventListener(GENERAL_SETTINGS_UPDATED_EVENT, applySettings);
+    };
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -228,15 +253,18 @@ export function EnterpriseWarehousesManager() {
   }, [rows, catalogRows]);
 
   const columns = useMemo<Column<WarehouseRecord>[]>(
-    () => [
-      { header: "اسم المخزن", accessor: "name" },
+    () => {
+      const baseColumns: Array<Column<WarehouseRecord> & { keyName: string }> = [
+      { keyName: "name", header: getColumnLabel(pageSettings, "name", "اسم المخزن"), accessor: "name" },
       {
-        header: "بلد المخزن",
+        keyName: "country",
+        header: getColumnLabel(pageSettings, "country", "بلد المخزن"),
         accessor: (row) => countryOptions.find((country) => country.value === row.country)?.label ?? row.country,
       },
-      { header: "الملاحظات", accessor: (row) => row.notes || "-" },
-      { header: "التاريخ", accessor: "createdAt" },
+      { keyName: "notes", header: getColumnLabel(pageSettings, "notes", "الملاحظات"), accessor: (row) => row.notes || "-" },
+      { keyName: "createdAt", header: getColumnLabel(pageSettings, "createdAt", "التاريخ"), accessor: "createdAt" },
       {
+        keyName: "actions",
         header: "الإجراءات",
         accessor: (row) => (
           <div className="flex items-center gap-1">
@@ -261,8 +289,17 @@ export function EnterpriseWarehousesManager() {
           </div>
         ),
       },
-    ],
-    [canEdit, canDelete]
+    ];
+
+      if (!pageSettings) {
+        return baseColumns.map(({ keyName: _keyName, ...column }) => column);
+      }
+
+      return baseColumns
+        .filter((column) => column.keyName === "actions" || isColumnVisible(pageSettings, column.keyName))
+        .map(({ keyName: _keyName, ...column }) => column);
+    },
+    [canEdit, canDelete, pageSettings]
   );
 
   /**
@@ -300,8 +337,13 @@ export function EnterpriseWarehousesManager() {
    * Validates and saves warehouse record.
    */
   function handleSave() {
-    if (!formState.name.trim()) {
+    if (isFieldRequired(pageSettings, "name") && !formState.name.trim()) {
       toast.error("اسم المخزن مطلوب");
+      return;
+    }
+
+    if (isFieldRequired(pageSettings, "country") && !formState.country.trim()) {
+      toast.error("بلد المخزن مطلوب");
       return;
     }
 
@@ -437,7 +479,7 @@ export function EnterpriseWarehousesManager() {
         <div className="grid grid-cols-1 gap-3">
           <input
             className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
-            placeholder="اسم المخزن"
+            placeholder={getFieldLabel(pageSettings, "name", "اسم المخزن")}
             value={formState.name}
             onChange={(event) => setFormState((prev) => ({ ...prev, name: event.target.value }))}
           />
@@ -454,7 +496,7 @@ export function EnterpriseWarehousesManager() {
           </select>
           <textarea
             className="min-h-[100px] rounded-lg border border-slate-200 px-3 py-2 text-sm"
-            placeholder="الملاحظات"
+            placeholder={getFieldLabel(pageSettings, "notes", "ملاحظات")}
             value={formState.notes}
             onChange={(event) => setFormState((prev) => ({ ...prev, notes: event.target.value }))}
           />

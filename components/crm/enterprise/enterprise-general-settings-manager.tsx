@@ -199,7 +199,170 @@ const defaultPages: PageRule[] = [
       { id: "prd_c_wh", key: "warehouse", label: "المستودع", isRequired: false, isVisible: true },
     ],
   },
+  {
+    id: "page_expenses",
+    slug: "expenses",
+    title: "CRM - المصاريف",
+    description: "التحكم في حقول إدخال المصاريف وأعمدة جدول المصروفات.",
+    isEnabled: true,
+    showInNavigation: true,
+    fields: [
+      { id: "exp_f_type", key: "type", label: "نوع المصروف", type: "select", options: ["general", "purchase"], isRequired: true, isVisible: true },
+      { id: "exp_f_date", key: "date", label: "التاريخ", type: "date", isRequired: true, isVisible: true },
+      { id: "exp_f_name", key: "expenseName", label: "اسم المصروف", type: "text", isRequired: false, isVisible: true },
+      { id: "exp_f_supplier", key: "supplierName", label: "المورد", type: "text", isRequired: false, isVisible: true },
+      { id: "exp_f_notes", key: "notes", label: "ملاحظات", type: "textarea", isRequired: false, isVisible: true },
+    ],
+    tableColumns: [
+      { id: "exp_c_type", key: "type", label: "النوع", isRequired: true, isVisible: true },
+      { id: "exp_c_date", key: "date", label: "التاريخ", isRequired: true, isVisible: true },
+      { id: "exp_c_total", key: "totalAmount", label: "الإجمالي", isRequired: true, isVisible: true },
+      { id: "exp_c_supplier", key: "supplierName", label: "المورد", isRequired: false, isVisible: true },
+      { id: "exp_c_actions", key: "actions", label: "الإجراءات", isRequired: false, isVisible: true },
+    ],
+  },
+  {
+    id: "page_cash_movements",
+    slug: "cash-movements",
+    title: "CRM - حركة الصندوق",
+    description: "التحكم في الحركات والتحويلات المالية.",
+    isEnabled: true,
+    showInNavigation: true,
+    fields: [],
+    tableColumns: [
+      { id: "cash_c_date", key: "date", label: "التاريخ", isRequired: true, isVisible: true },
+      { id: "cash_c_type", key: "type", label: "النوع", isRequired: true, isVisible: true },
+      { id: "cash_c_amount", key: "amount", label: "المبلغ", isRequired: true, isVisible: true },
+    ],
+  },
+  {
+    id: "page_warehouses",
+    slug: "warehouses",
+    title: "CRM - المخازن",
+    description: "التحكم في حقول المخازن وأعمدة الجدول.",
+    isEnabled: true,
+    showInNavigation: true,
+    fields: [
+      { id: "wh_f_name", key: "name", label: "اسم المخزن", type: "text", isRequired: true, isVisible: true },
+      { id: "wh_f_country", key: "country", label: "بلد المخزن", type: "text", isRequired: true, isVisible: true },
+      { id: "wh_f_notes", key: "notes", label: "الملاحظات", type: "textarea", isRequired: false, isVisible: true },
+    ],
+    tableColumns: [
+      { id: "wh_c_name", key: "name", label: "اسم المخزن", isRequired: true, isVisible: true },
+      { id: "wh_c_country", key: "country", label: "بلد المخزن", isRequired: true, isVisible: true },
+      { id: "wh_c_notes", key: "notes", label: "الملاحظات", isRequired: false, isVisible: true },
+      { id: "wh_c_created", key: "createdAt", label: "التاريخ", isRequired: false, isVisible: true },
+      { id: "wh_c_actions", key: "actions", label: "الإجراءات", isRequired: false, isVisible: true },
+    ],
+  },
+  {
+    id: "page_shipping",
+    slug: "shipping-companies",
+    title: "CRM - شركات الشحن",
+    description: "التحكم في حقول شركات الشحن وأعمدة الجدول.",
+    isEnabled: true,
+    showInNavigation: true,
+    fields: [
+      { id: "ship_f_company", key: "company", label: "الشركة", type: "text", isRequired: true, isVisible: true },
+      { id: "ship_f_service", key: "serviceLevel", label: "الخدمة", type: "text", isRequired: false, isVisible: true },
+      { id: "ship_f_region", key: "region", label: "النطاق", type: "text", isRequired: false, isVisible: true },
+      { id: "ship_f_cost", key: "avgCost", label: "متوسط التكلفة", type: "number", isRequired: false, isVisible: true },
+      { id: "ship_f_sla", key: "sla", label: "SLA", type: "number", isRequired: false, isVisible: true },
+    ],
+    tableColumns: [
+      { id: "ship_c_company", key: "company", label: "الشركة", isRequired: true, isVisible: true },
+      { id: "ship_c_service", key: "serviceLevel", label: "الخدمة", isRequired: false, isVisible: true },
+      { id: "ship_c_region", key: "region", label: "النطاق", isRequired: false, isVisible: true },
+      { id: "ship_c_cost", key: "avgCost", label: "متوسط تكلفة الشحنة", isRequired: false, isVisible: true },
+      { id: "ship_c_sla", key: "sla", label: "SLA يوم", isRequired: false, isVisible: true },
+      { id: "ship_c_actions", key: "actions", label: "الإجراءات", isRequired: false, isVisible: true },
+    ],
+  },
+  {
+    id: "page_returns",
+    slug: "returns",
+    title: "CRM - المرتجعات",
+    description: "التحكم في حقول المرتجعات وأعمدة الجدول.",
+    isEnabled: true,
+    showInNavigation: true,
+    fields: [
+      { id: "ret_f_type", key: "returnType", label: "نوع المرتجع", type: "select", options: ["damaged", "replacement", "refund"], isRequired: true, isVisible: true },
+      { id: "ret_f_product", key: "productName", label: "المنتج", type: "text", isRequired: true, isVisible: true },
+      { id: "ret_f_qty", key: "returnedQuantity", label: "الكمية", type: "number", isRequired: true, isVisible: true },
+      { id: "ret_f_customer", key: "customer", label: "العميل", type: "text", isRequired: true, isVisible: true },
+      { id: "ret_f_reason", key: "reason", label: "السبب", type: "textarea", isRequired: false, isVisible: true },
+    ],
+    tableColumns: [
+      { id: "ret_c_type", key: "returnType", label: "النوع", isRequired: true, isVisible: true },
+      { id: "ret_c_product", key: "productName", label: "المنتج", isRequired: true, isVisible: true },
+      { id: "ret_c_qty", key: "returnedQuantity", label: "الكمية", isRequired: true, isVisible: true },
+      { id: "ret_c_customer", key: "customer", label: "العميل", isRequired: true, isVisible: true },
+      { id: "ret_c_stage", key: "stage", label: "المرحلة", isRequired: true, isVisible: true },
+      { id: "ret_c_created", key: "createdAt", label: "التاريخ", isRequired: false, isVisible: true },
+      { id: "ret_c_actions", key: "actions", label: "الإجراءات", isRequired: false, isVisible: true },
+    ],
+  },
+  {
+    id: "page_opportunities",
+    slug: "opportunities",
+    title: "CRM - الفرص البيعية",
+    description: "صفحة إدارة الفرص البيعية.",
+    isEnabled: true,
+    showInNavigation: true,
+    fields: [],
+    tableColumns: [],
+  },
+  {
+    id: "page_tasks",
+    slug: "tasks",
+    title: "CRM - مهام الفرق",
+    description: "صفحة إدارة المهام.",
+    isEnabled: true,
+    showInNavigation: true,
+    fields: [],
+    tableColumns: [],
+  },
+  {
+    id: "page_settings",
+    slug: "settings",
+    title: "CRM - الإعدادات العامة",
+    description: "إعدادات CRM المتقدم.",
+    isEnabled: true,
+    showInNavigation: true,
+    fields: [],
+    tableColumns: [],
+  },
 ];
+
+/**
+ * Merges defaults with saved settings to add newly introduced pages/fields.
+ */
+function mergeWithDefaults(input: WebsiteGeneralSettings): WebsiteGeneralSettings {
+  const defaultBySlug = Object.fromEntries(defaultPages.map((page) => [page.slug, page]));
+  const inputBySlug = Object.fromEntries((input.pages ?? []).map((page) => [page.slug, page]));
+
+  const mergedPages = defaultPages.map((defaultPage) => {
+    const saved = inputBySlug[defaultPage.slug];
+    if (!saved) {
+      return defaultPage;
+    }
+
+    return {
+      ...defaultPage,
+      ...saved,
+      fields: Array.isArray(saved.fields) ? saved.fields : defaultPage.fields,
+      tableColumns: Array.isArray(saved.tableColumns) ? saved.tableColumns : defaultPage.tableColumns,
+    };
+  });
+
+  const extraPages = (input.pages ?? []).filter((page) => !defaultBySlug[page.slug]);
+
+  return {
+    sections: Array.isArray(input.sections) && input.sections.length > 0 ? input.sections : defaultSections,
+    pages: [...mergedPages, ...extraPages],
+    updatedAt: input.updatedAt || new Date().toISOString(),
+  };
+}
 
 /**
  * Builds the default settings object.
@@ -251,7 +414,7 @@ export function EnterpriseGeneralSettingsManager() {
       if (raw) {
         const parsed = JSON.parse(raw) as WebsiteGeneralSettings;
         if (Array.isArray(parsed.sections) && Array.isArray(parsed.pages)) {
-          setSettings(parsed);
+          setSettings(mergeWithDefaults(parsed));
         }
       }
     } catch {
@@ -494,7 +657,7 @@ export function EnterpriseGeneralSettingsManager() {
       <SectionHeader
         align="right"
         title="الإعدادات العامة للموقع"
-        description="حدد الأقسام الرئيسية والصفحات المعروضة فقط."
+        description="حدد الأقسام الرئيسية، والصفحات المعروضة، وما يظهر للعميل داخل الجداول والحقول المطلوبة."
       >
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" onClick={handleResetSettings}>
@@ -506,7 +669,7 @@ export function EnterpriseGeneralSettingsManager() {
         </div>
       </SectionHeader>
 
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-4 md:grid-cols-3">
         <DynamicCard className="border-l-4 border-l-blue-500">
           <DynamicCard.Content className="py-4">
             <p className="text-sm text-slate-600">الأقسام الرئيسية</p>
@@ -517,6 +680,12 @@ export function EnterpriseGeneralSettingsManager() {
           <DynamicCard.Content className="py-4">
             <p className="text-sm text-slate-600">الصفحات المفعلة</p>
             <p className="text-3xl font-bold text-emerald-600">{enabledPagesCount}</p>
+          </DynamicCard.Content>
+        </DynamicCard>
+        <DynamicCard className="border-l-4 border-l-orange-500">
+          <DynamicCard.Content className="py-4">
+            <p className="text-sm text-slate-600">الحقول/الأعمدة الإلزامية</p>
+            <p className="text-3xl font-bold text-orange-600">{requiredFieldsCount + requiredColumnsCount}</p>
           </DynamicCard.Content>
         </DynamicCard>
       </div>
@@ -608,7 +777,7 @@ export function EnterpriseGeneralSettingsManager() {
       <DynamicCard>
         <DynamicCard.Header
           title="إعدادات الصفحات"
-          description="تحكم في ظهور كل صفحة ضمن النظام والقائمة."
+          description="تحكم في ظهور الصفحات، وما يظهر داخل كل جدول، وما هو مطلوب في الإدخال."
         />
         <DynamicCard.Content className="space-y-3">
           {settings.pages.map((page) => (
@@ -650,12 +819,196 @@ export function EnterpriseGeneralSettingsManager() {
                     />
                     في القائمة
                   </label>
+                  <Button size="sm" variant="outline" leftIcon={<Pencil className="h-4 w-4" />} onClick={() => openPageEditor(page)}>
+                    تعديل الحقول والجداول
+                  </Button>
+                </div>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <p className="mb-2 text-xs font-semibold text-slate-500">الحقول المطلوبة</p>
+                  <div className="space-y-1 text-sm text-slate-700">
+                    {page.fields
+                      .filter((field) => field.isRequired)
+                      .map((field) => (
+                        <p key={field.id}>- {field.label} ({field.key})</p>
+                      ))}
+                  </div>
+                </div>
+                <div>
+                  <p className="mb-2 text-xs font-semibold text-slate-500">أعمدة الجدول الظاهرة</p>
+                  <div className="space-y-1 text-sm text-slate-700">
+                    {page.tableColumns
+                      .filter((column) => column.isVisible)
+                      .map((column) => (
+                        <p key={column.id}>- {column.label} ({column.key})</p>
+                      ))}
+                  </div>
                 </div>
               </div>
             </div>
           ))}
         </DynamicCard.Content>
       </DynamicCard>
+
+      <AppModal
+        isOpen={isPageModalOpen}
+        onClose={() => setIsPageModalOpen(false)}
+        size="xl"
+        title={editingPage ? `تعديل إعدادات: ${editingPage.title}` : "تعديل الصفحة"}
+        description="يمكنك تحديد الأعمدة التي يراها العميل، وتحديد الحقول المطلوبة وإخفاء الباقي."
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setIsPageModalOpen(false)}>
+              إلغاء
+            </Button>
+            <Button leftIcon={<Save className="h-4 w-4" />} onClick={savePageEditor}>
+              حفظ التعديلات
+            </Button>
+          </>
+        }
+      >
+        {editingPage && (
+          <div className="space-y-6">
+            <div className="grid gap-4 lg:grid-cols-2">
+              <div className="space-y-3 rounded-lg border border-slate-200 p-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-semibold text-slate-900">حقول الإدخال</h3>
+                  <Button size="sm" variant="outline" leftIcon={<Plus className="h-4 w-4" />} onClick={addEditingField}>
+                    إضافة حقل
+                  </Button>
+                </div>
+
+                {editingPage.fields.map((field) => (
+                  <div key={field.id} className="rounded-md border border-slate-200 p-3">
+                    <div className="grid gap-2 md:grid-cols-2">
+                      <input
+                        className="h-9 rounded-md border border-slate-200 px-2 text-sm"
+                        value={field.label}
+                        onChange={(event) => updateEditingField(field.id, (prev) => ({ ...prev, label: event.target.value }))}
+                        placeholder="اسم الحقل"
+                      />
+                      <input
+                        className="h-9 rounded-md border border-slate-200 px-2 text-sm"
+                        value={field.key}
+                        onChange={(event) => updateEditingField(field.id, (prev) => ({ ...prev, key: event.target.value }))}
+                        placeholder="fieldKey"
+                      />
+                      <select
+                        className="h-9 rounded-md border border-slate-200 px-2 text-sm"
+                        value={field.type}
+                        onChange={(event) =>
+                          updateEditingField(field.id, (prev) => ({
+                            ...prev,
+                            type: event.target.value as FieldType,
+                            options: event.target.value === "select" ? prev.options ?? [] : [],
+                          }))
+                        }
+                      >
+                        {fieldTypeOptions.map((option) => (
+                          <option key={option} value={option}>{option}</option>
+                        ))}
+                      </select>
+                      {field.type === "select" && (
+                        <input
+                          className="h-9 rounded-md border border-slate-200 px-2 text-sm"
+                          value={(field.options ?? []).join(",")}
+                          onChange={(event) =>
+                            updateEditingField(field.id, (prev) => ({
+                              ...prev,
+                              options: event.target.value.split(",").map((item) => item.trim()).filter(Boolean),
+                            }))
+                          }
+                          placeholder="options: a,b,c"
+                        />
+                      )}
+                      <div className="flex items-center gap-3 text-sm md:col-span-2">
+                        <label className="inline-flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={field.isRequired}
+                            onChange={(event) => updateEditingField(field.id, (prev) => ({ ...prev, isRequired: event.target.checked }))}
+                          />
+                          مطلوب
+                        </label>
+                        <label className="inline-flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={field.isVisible}
+                            onChange={(event) => updateEditingField(field.id, (prev) => ({ ...prev, isVisible: event.target.checked }))}
+                          />
+                          ظاهر
+                        </label>
+                        <button
+                          onClick={() => removeEditingField(field.id)}
+                          className="rounded-md border border-red-200 p-1.5 text-red-700 hover:bg-red-50"
+                          title="حذف الحقل"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="space-y-3 rounded-lg border border-slate-200 p-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-semibold text-slate-900">أعمدة الجداول</h3>
+                  <Button size="sm" variant="outline" leftIcon={<Plus className="h-4 w-4" />} onClick={addEditingColumn}>
+                    إضافة عمود
+                  </Button>
+                </div>
+
+                {editingPage.tableColumns.map((column) => (
+                  <div key={column.id} className="rounded-md border border-slate-200 p-3">
+                    <div className="grid gap-2 md:grid-cols-2">
+                      <input
+                        className="h-9 rounded-md border border-slate-200 px-2 text-sm"
+                        value={column.label}
+                        onChange={(event) => updateEditingColumn(column.id, (prev) => ({ ...prev, label: event.target.value }))}
+                        placeholder="اسم العمود"
+                      />
+                      <input
+                        className="h-9 rounded-md border border-slate-200 px-2 text-sm"
+                        value={column.key}
+                        onChange={(event) => updateEditingColumn(column.id, (prev) => ({ ...prev, key: event.target.value }))}
+                        placeholder="columnKey"
+                      />
+                      <div className="flex items-center gap-3 text-sm md:col-span-2">
+                        <label className="inline-flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={column.isRequired}
+                            onChange={(event) => updateEditingColumn(column.id, (prev) => ({ ...prev, isRequired: event.target.checked }))}
+                          />
+                          مطلوب
+                        </label>
+                        <label className="inline-flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={column.isVisible}
+                            onChange={(event) => updateEditingColumn(column.id, (prev) => ({ ...prev, isVisible: event.target.checked }))}
+                          />
+                          ظاهر
+                        </label>
+                        <button
+                          onClick={() => removeEditingColumn(column.id)}
+                          className="rounded-md border border-red-200 p-1.5 text-red-700 hover:bg-red-50"
+                          title="حذف العمود"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </AppModal>
 
       {!isHydrated && (
         <p className="text-xs text-slate-500">جاري تحميل الإعدادات المخزنة...</p>
