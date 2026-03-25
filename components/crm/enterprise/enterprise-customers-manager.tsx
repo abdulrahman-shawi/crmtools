@@ -40,7 +40,6 @@ interface EnterpriseCustomer {
   lastCommunication: string;
   nextFollowUp: string;
   notes: string;
-  customFields?: Record<string, string>;
 }
 
 interface CustomerCommunication {
@@ -137,7 +136,6 @@ interface SalesOrder {
   total: number;
   itemCount: number;
   status: "new" | "processing" | "completed";
-  customFields?: Record<string, string>;
 }
 
 const SALES_INVOICES_STORAGE_KEY = "crm-enterprise-sales-invoices";
@@ -228,13 +226,6 @@ const countryOptions: Array<{ code: CountryCode; label: string }> = [
   { code: "EG", label: "مصر" },
   { code: "JO", label: "الأردن" },
 ];
-
-const BUILTIN_ORDER_FIELD_KEYS = new Set([
-  "receiverName",
-  "receiverPhone",
-  "receiverCity",
-  "deliveryNotes",
-]);
 
 const BUILTIN_CUSTOMER_FORM_KEYS = new Set([
   "companyName",
@@ -595,7 +586,6 @@ export function EnterpriseCustomersManager() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formState, setFormState] = useState<CustomerFormState>(initialFormState);
-  const [customFieldValues, setCustomFieldValues] = useState<Record<string, string>>({});
   const [isCommunicationModalOpen, setIsCommunicationModalOpen] = useState(false);
 
     const { user } = useAuth();
@@ -620,7 +610,6 @@ export function EnterpriseCustomersManager() {
   const [posReceiverCity, setPosReceiverCity] = useState("");
   const [posReceivedAmount, setPosReceivedAmount] = useState("");
   const [posDeliveryNotes, setPosDeliveryNotes] = useState("");
-  const [posCustomFieldValues, setPosCustomFieldValues] = useState<Record<string, string>>({});
   const [salesInvoices, setSalesInvoices] = useState<SalesInvoice[]>(initialSalesInvoices);
   const [salesOrders, setSalesOrders] = useState<SalesOrder[]>(initialSalesOrders);
   const [isCustomerHistoryModalOpen, setIsCustomerHistoryModalOpen] = useState(false);
@@ -798,32 +787,8 @@ export function EnterpriseCustomersManager() {
 
   const orderHistoryVisibleColumns = useMemo(() => {
     const defaultColumns = ["orderNo", "date", "itemCount", "total", "status"] as const;
-    const candidateColumns = (ordersPageSettings?.tableColumns ?? [])
-      .filter((column) => isColumnVisible(ordersPageSettings, column.key))
-      .map((column) => column.key);
-
-    if (candidateColumns.length === 0) {
-      return defaultColumns;
-    }
-
-    return candidateColumns;
+    return defaultColumns;
   }, [ordersPageSettings]);
-
-  const orderDynamicFields = useMemo(
-    () =>
-      (ordersPageSettings?.fields ?? []).filter(
-        (field) => field.isVisible !== false && !BUILTIN_ORDER_FIELD_KEYS.has(field.key)
-      ),
-    [ordersPageSettings]
-  );
-
-  const customVisibleFields = useMemo(
-    () =>
-      (pageSettings?.fields ?? []).filter(
-        (field) => field.isVisible && !BUILTIN_CUSTOMER_FORM_KEYS.has(field.key)
-      ),
-    [pageSettings]
-  );
 
   const previewInvoice = useMemo(
     () => salesInvoices.find((invoice) => invoice.id === previewInvoiceId) ?? null,
@@ -947,7 +912,6 @@ export function EnterpriseCustomersManager() {
     }
     setEditingId(null);
     setFormState(initialFormState);
-    setCustomFieldValues({});
     setIsModalOpen(true);
   }
 
@@ -976,18 +940,7 @@ export function EnterpriseCustomersManager() {
       nextFollowUp: customer.nextFollowUp,
       notes: customer.notes,
     });
-    setCustomFieldValues(customer.customFields ?? {});
     setIsModalOpen(true);
-  }
-
-  /**
-   * Updates value for one dynamic custom field.
-   */
-  function handleCustomFieldChange(fieldKey: string, value: string) {
-    setCustomFieldValues((prev) => ({
-      ...prev,
-      [fieldKey]: value,
-    }));
   }
 
   /**
@@ -1036,18 +989,7 @@ export function EnterpriseCustomersManager() {
     setPosReceiverCity(customer.city);
     setPosReceivedAmount("");
     setPosDeliveryNotes("");
-    setPosCustomFieldValues({});
     setIsPosModalOpen(true);
-  }
-
-  /**
-   * Updates one dynamic field value for POS order creation.
-   */
-  function handlePosCustomFieldChange(fieldKey: string, value: string) {
-    setPosCustomFieldValues((prev) => ({
-      ...prev,
-      [fieldKey]: value,
-    }));
   }
 
   /**
@@ -1169,18 +1111,6 @@ export function EnterpriseCustomersManager() {
       return;
     }
 
-    for (const field of orderDynamicFields) {
-      if (!field.isRequired) {
-        continue;
-      }
-
-      const value = posCustomFieldValues[field.key];
-      if (!value || !value.trim()) {
-        toast.error(`الحقل ${field.label} مطلوب`);
-        return;
-      }
-    }
-
     const now = new Date();
     const today = now.toISOString().slice(0, 10);
     const invoiceNo = `INV-${now.getTime().toString().slice(-6)}`;
@@ -1241,7 +1171,6 @@ export function EnterpriseCustomersManager() {
       total,
       itemCount: posItems.reduce((sum, item) => sum + item.quantity, 0),
       status: "new",
-      customFields: posCustomFieldValues,
     };
 
     setSalesInvoices((prev) => [invoice, ...prev]);
@@ -1270,7 +1199,6 @@ export function EnterpriseCustomersManager() {
     setPosReceiverCity("");
     setPosReceivedAmount("");
     setPosDeliveryNotes("");
-    setPosCustomFieldValues({});
     toast.success(`تم إنشاء ${invoice.invoiceNo} و ${order.orderNo}`);
   }
 
@@ -1323,18 +1251,6 @@ export function EnterpriseCustomersManager() {
       }
     }
 
-    for (const field of customVisibleFields) {
-      if (!field.isRequired) {
-        continue;
-      }
-
-      const value = customFieldValues[field.key];
-      if (!value || !value.trim()) {
-        toast.error(`الحقل ${field.label} مطلوب`);
-        return;
-      }
-    }
-
     if (
       !formState.companyName.trim() ||
       formState.contactPersons.length === 0 ||
@@ -1367,7 +1283,6 @@ export function EnterpriseCustomersManager() {
       lastCommunication: formState.lastCommunication.trim(),
       nextFollowUp: formState.nextFollowUp,
       notes: formState.notes.trim(),
-      customFields: customFieldValues,
     };
 
     if (editingId) {
@@ -1381,7 +1296,6 @@ export function EnterpriseCustomersManager() {
     setIsModalOpen(false);
     setEditingId(null);
     setFormState(initialFormState);
-    setCustomFieldValues({});
   }
 
   /**
@@ -1519,8 +1433,7 @@ export function EnterpriseCustomersManager() {
                 .map((order) => `${order.orderNo} ${order.total} ${order.date}`)
                 .join(" ");
 
-              const customFieldsText = Object.values(customer.customFields ?? {}).join(" ");
-              return `${customer.companyName} ${sizeLabel[customer.companySize]} ${customer.industry} ${customer.contactPersons.join(" ")} ${customer.city} ${customer.country} ${customer.phone} ${statusLabel[customer.status].label} ${tierLabel[customer.tier].label} ${customer.lastCommunication} ${customer.notes} ${customFieldsText} ${communicationText} ${invoiceText} ${orderText}`;
+              return `${customer.companyName} ${sizeLabel[customer.companySize]} ${customer.industry} ${customer.contactPersons.join(" ")} ${customer.city} ${customer.country} ${customer.phone} ${statusLabel[customer.status].label} ${tierLabel[customer.tier].label} ${customer.lastCommunication} ${customer.notes} ${communicationText} ${invoiceText} ${orderText}`;
             }}
           />
         </DynamicCard.Content>
@@ -1663,59 +1576,6 @@ export function EnterpriseCustomersManager() {
             value={formState.notes}
             onChange={(event) => setFormState((prev) => ({ ...prev, notes: event.target.value }))}
           />
-          {customVisibleFields.map((field) => {
-            if (field.type === "textarea") {
-              return (
-                <textarea
-                  key={field.id}
-                  className="min-h-[90px] rounded-lg border border-slate-200 px-3 py-2 text-sm md:col-span-2"
-                  placeholder={field.label}
-                  value={customFieldValues[field.key] ?? ""}
-                  onChange={(event) => handleCustomFieldChange(field.key, event.target.value)}
-                />
-              );
-            }
-
-            if (field.type === "select") {
-              return (
-                <select
-                  key={field.id}
-                  className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
-                  value={customFieldValues[field.key] ?? ""}
-                  onChange={(event) => handleCustomFieldChange(field.key, event.target.value)}
-                >
-                  <option value="">اختر {field.label}</option>
-                  {(field.options ?? []).map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
-              );
-            }
-
-            const htmlInputType: "text" | "number" | "date" | "email" | "tel" =
-              field.type === "number"
-                ? "number"
-                : field.type === "date"
-                  ? "date"
-                  : field.type === "email"
-                    ? "email"
-                    : field.type === "phone"
-                      ? "tel"
-                      : "text";
-
-            return (
-              <input
-                key={field.id}
-                type={htmlInputType}
-                className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
-                placeholder={field.label}
-                value={customFieldValues[field.key] ?? ""}
-                onChange={(event) => handleCustomFieldChange(field.key, event.target.value)}
-              />
-            );
-          })}
         </div>
       </AppModal>
 
@@ -1873,63 +1733,6 @@ export function EnterpriseCustomersManager() {
                   onChange={(event) => setPosReceiverCity(event.target.value)}
                 />
               </div>
-              {orderDynamicFields.map((field) => {
-                if (field.type === "textarea") {
-                  return (
-                    <div key={field.id} className="md:col-span-2">
-                      <p className="mb-1 text-xs font-medium text-slate-600">{field.label}</p>
-                      <textarea
-                        className="min-h-[80px] w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                        value={posCustomFieldValues[field.key] ?? ""}
-                        onChange={(event) => handlePosCustomFieldChange(field.key, event.target.value)}
-                      />
-                    </div>
-                  );
-                }
-
-                if (field.type === "select") {
-                  return (
-                    <div key={field.id}>
-                      <p className="mb-1 text-xs font-medium text-slate-600">{field.label}</p>
-                      <select
-                        className="h-9 w-full rounded-lg border border-slate-200 px-2 text-sm"
-                        value={posCustomFieldValues[field.key] ?? ""}
-                        onChange={(event) => handlePosCustomFieldChange(field.key, event.target.value)}
-                      >
-                        <option value="">اختر {field.label}</option>
-                        {(field.options ?? []).map((option) => (
-                          <option key={option} value={option}>
-                            {option}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  );
-                }
-
-                const htmlInputType: "text" | "number" | "date" | "email" | "tel" =
-                  field.type === "number"
-                    ? "number"
-                    : field.type === "date"
-                      ? "date"
-                      : field.type === "email"
-                        ? "email"
-                        : field.type === "phone"
-                          ? "tel"
-                          : "text";
-
-                return (
-                  <div key={field.id}>
-                    <p className="mb-1 text-xs font-medium text-slate-600">{field.label}</p>
-                    <input
-                      type={htmlInputType}
-                      className="h-9 w-full rounded-lg border border-slate-200 px-2 text-sm"
-                      value={posCustomFieldValues[field.key] ?? ""}
-                      onChange={(event) => handlePosCustomFieldChange(field.key, event.target.value)}
-                    />
-                  </div>
-                );
-              })}
             </div>
 
             <p className="text-sm font-semibold text-slate-800">بنود الفاتورة</p>
@@ -2157,33 +1960,15 @@ export function EnterpriseCustomersManager() {
                     <tr>
                       {orderHistoryVisibleColumns.map((columnKey) => (
                         <th key={columnKey} className="p-3 text-right font-semibold text-slate-700">
-                          {columnKey === "itemCount"
-                            ? "القطع"
-                            : getColumnLabel(
-                                ordersPageSettings,
-                                columnKey,
-                                columnKey === "orderNo"
-                                  ? "رقم الطلب"
-                                  : columnKey === "invoiceNo"
-                                    ? "رقم الفاتورة"
-                                    : columnKey === "date"
-                                      ? "التاريخ"
-                                      : columnKey === "customerName"
-                                        ? "العميل"
-                                        : columnKey === "total"
-                                          ? "الإجمالي"
-                                          : columnKey === "shippingCost"
-                                            ? "الشحن"
-                                            : columnKey === "status"
-                                              ? "الحالة"
-                                              : columnKey === "receiverName"
-                                                ? "اسم المستلم"
-                                                : columnKey === "receiverPhone"
-                                                  ? "رقم المستلم"
-                                                  : columnKey === "receiverCity"
-                                                    ? "مدينة المستلم"
-                                                    : columnKey
-                              )}
+                          {columnKey === "orderNo"
+                            ? "رقم الطلب"
+                            : columnKey === "date"
+                              ? "التاريخ"
+                              : columnKey === "itemCount"
+                                ? "القطع"
+                                : columnKey === "total"
+                                  ? "الإجمالي"
+                                  : "الحالة"}
                         </th>
                       ))}
                     </tr>
@@ -2196,36 +1981,12 @@ export function EnterpriseCustomersManager() {
                             return <td key={columnKey} className="p-3 text-slate-700">{order.orderNo}</td>;
                           }
 
-                          if (columnKey === "invoiceNo") {
-                            return <td key={columnKey} className="p-3 text-slate-600">{order.invoiceNo}</td>;
-                          }
-
                           if (columnKey === "date") {
                             return <td key={columnKey} className="p-3 text-slate-600">{order.date}</td>;
                           }
 
-                          if (columnKey === "customerName") {
-                            return <td key={columnKey} className="p-3 text-slate-600">{order.customerName}</td>;
-                          }
-
                           if (columnKey === "total") {
                             return <td key={columnKey} className="p-3 text-slate-700">{order.total.toLocaleString()} ر.س</td>;
-                          }
-
-                          if (columnKey === "shippingCost") {
-                            return <td key={columnKey} className="p-3 text-slate-600">{order.shippingCost.toLocaleString()} ر.س</td>;
-                          }
-
-                          if (columnKey === "receiverName") {
-                            return <td key={columnKey} className="p-3 text-slate-600">{order.receiverName || "-"}</td>;
-                          }
-
-                          if (columnKey === "receiverPhone") {
-                            return <td key={columnKey} className="p-3 text-slate-600">{order.receiverPhone || "-"}</td>;
-                          }
-
-                          if (columnKey === "receiverCity") {
-                            return <td key={columnKey} className="p-3 text-slate-600">{order.receiverCity || "-"}</td>;
                           }
 
                           if (columnKey === "itemCount") {
@@ -2248,7 +2009,7 @@ export function EnterpriseCustomersManager() {
                             );
                           }
 
-                          return <td key={columnKey} className="p-3 text-slate-600">{order.customFields?.[columnKey] || "-"}</td>;
+                          return <td key={columnKey} className="p-3 text-slate-600">-</td>;
                         })}
                       </tr>
                     ))}

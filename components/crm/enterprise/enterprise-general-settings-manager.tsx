@@ -494,7 +494,7 @@ export function EnterpriseGeneralSettingsManager() {
       <SectionHeader
         align="right"
         title="الإعدادات العامة للموقع"
-        description="حدد الأقسام الرئيسية، الصفحات المعروضة، والحقول المطلوبة في كل صفحة، مع معلومات الجداول الإلزامية."
+        description="حدد الأقسام الرئيسية والصفحات المعروضة فقط."
       >
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" onClick={handleResetSettings}>
@@ -506,7 +506,7 @@ export function EnterpriseGeneralSettingsManager() {
         </div>
       </SectionHeader>
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2">
         <DynamicCard className="border-l-4 border-l-blue-500">
           <DynamicCard.Content className="py-4">
             <p className="text-sm text-slate-600">الأقسام الرئيسية</p>
@@ -517,12 +517,6 @@ export function EnterpriseGeneralSettingsManager() {
           <DynamicCard.Content className="py-4">
             <p className="text-sm text-slate-600">الصفحات المفعلة</p>
             <p className="text-3xl font-bold text-emerald-600">{enabledPagesCount}</p>
-          </DynamicCard.Content>
-        </DynamicCard>
-        <DynamicCard className="border-l-4 border-l-orange-500">
-          <DynamicCard.Content className="py-4">
-            <p className="text-sm text-slate-600">الحقول/الأعمدة الإلزامية</p>
-            <p className="text-3xl font-bold text-orange-600">{requiredFieldsCount + requiredColumnsCount}</p>
           </DynamicCard.Content>
         </DynamicCard>
       </div>
@@ -614,7 +608,7 @@ export function EnterpriseGeneralSettingsManager() {
       <DynamicCard>
         <DynamicCard.Header
           title="إعدادات الصفحات"
-          description="تحكم في ظهور كل صفحة وما يجب إدخاله وعرضه في الجداول."
+          description="تحكم في ظهور كل صفحة ضمن النظام والقائمة."
         />
         <DynamicCard.Content className="space-y-3">
           {settings.pages.map((page) => (
@@ -656,252 +650,12 @@ export function EnterpriseGeneralSettingsManager() {
                     />
                     في القائمة
                   </label>
-                  <Button size="sm" variant="outline" leftIcon={<Pencil className="h-4 w-4" />} onClick={() => openPageEditor(page)}>
-                    تعديل الحقول والجداول
-                  </Button>
-                </div>
-              </div>
-
-              <div className="grid gap-4 md:grid-cols-2">
-                <div>
-                  <p className="mb-2 text-xs font-semibold text-slate-500">الحقول المطلوبة في الصفحة</p>
-                  <div className="space-y-1 text-sm text-slate-700">
-                    {page.fields
-                      .filter((field) => field.isRequired)
-                      .map((field) => (
-                        <p key={field.id}>- {field.label} ({field.key})</p>
-                      ))}
-                  </div>
-                </div>
-                <div>
-                  <p className="mb-2 text-xs font-semibold text-slate-500">المعلومات المطلوبة في الجدول</p>
-                  <div className="space-y-1 text-sm text-slate-700">
-                    {page.tableColumns
-                      .filter((column) => column.isRequired)
-                      .map((column) => (
-                        <p key={column.id}>- {column.label} ({column.key})</p>
-                      ))}
-                  </div>
                 </div>
               </div>
             </div>
           ))}
         </DynamicCard.Content>
       </DynamicCard>
-
-      <AppModal
-        isOpen={isPageModalOpen}
-        onClose={() => setIsPageModalOpen(false)}
-        size="xl"
-        title={editingPage ? `تعديل إعدادات: ${editingPage.title}` : "تعديل الصفحة"}
-        description="حدد الحقول المطلوبة لكل صفحة، وما يجب ظهوره داخل جدول البيانات."
-        footer={
-          <>
-            <Button variant="outline" onClick={() => setIsPageModalOpen(false)}>
-              إلغاء
-            </Button>
-            <Button leftIcon={<Save className="h-4 w-4" />} onClick={savePageEditor}>
-              حفظ التعديلات
-            </Button>
-          </>
-        }
-      >
-        {editingPage && (
-          <div className="space-y-6">
-            <div className="grid gap-3 md:grid-cols-2">
-              <div>
-                <label className="mb-1 block text-sm text-slate-600">اسم الصفحة</label>
-                <input
-                  className="h-10 w-full rounded-md border border-slate-200 px-3 text-sm"
-                  value={editingPage.title}
-                  onChange={(event) =>
-                    setEditingPage((prev) => (prev ? { ...prev, title: event.target.value } : prev))
-                  }
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-sm text-slate-600">الوصف</label>
-                <input
-                  className="h-10 w-full rounded-md border border-slate-200 px-3 text-sm"
-                  value={editingPage.description}
-                  onChange={(event) =>
-                    setEditingPage((prev) => (prev ? { ...prev, description: event.target.value } : prev))
-                  }
-                />
-              </div>
-            </div>
-
-            <div className="grid gap-4 lg:grid-cols-2">
-              <div className="space-y-3 rounded-lg border border-slate-200 p-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="font-semibold text-slate-900">حقول الصفحة</h3>
-                  <Button size="sm" variant="outline" leftIcon={<Plus className="h-4 w-4" />} onClick={addEditingField}>
-                    إضافة حقل
-                  </Button>
-                </div>
-
-                {editingPage.fields.map((field) => (
-                  <div key={field.id} className="rounded-md border border-slate-200 p-3">
-                    <div className="grid gap-2 md:grid-cols-2">
-                      <input
-                        className="h-9 rounded-md border border-slate-200 px-2 text-sm"
-                        value={field.label}
-                        onChange={(event) =>
-                          updateEditingField(field.id, (prev) => ({ ...prev, label: event.target.value }))
-                        }
-                        placeholder="اسم الحقل"
-                      />
-                      <input
-                        className="h-9 rounded-md border border-slate-200 px-2 text-sm"
-                        value={field.key}
-                        onChange={(event) =>
-                          updateEditingField(field.id, (prev) => ({ ...prev, key: event.target.value }))
-                        }
-                        placeholder="fieldKey"
-                      />
-                      <select
-                        className="h-9 rounded-md border border-slate-200 px-2 text-sm"
-                        value={field.type}
-                        onChange={(event) =>
-                          updateEditingField(field.id, (prev) => ({
-                            ...prev,
-                            type: event.target.value as FieldType,
-                            options: event.target.value === "select" ? prev.options ?? [] : [],
-                          }))
-                        }
-                      >
-                        {fieldTypeOptions.map((option) => (
-                          <option key={option} value={option}>
-                            {option}
-                          </option>
-                        ))}
-                      </select>
-                      {field.type === "select" && (
-                        <input
-                          className="h-9 rounded-md border border-slate-200 px-2 text-sm md:col-span-2"
-                          value={(field.options ?? []).join(",")}
-                          onChange={(event) =>
-                            updateEditingField(field.id, (prev) => ({
-                              ...prev,
-                              options: event.target.value
-                                .split(",")
-                                .map((item) => item.trim())
-                                .filter(Boolean),
-                            }))
-                          }
-                          placeholder="خيارات select مفصولة بفاصلة، مثال: جديد,نشط,مجمّد"
-                        />
-                      )}
-                      <div className="flex items-center gap-3 text-sm">
-                        <label className="inline-flex items-center gap-2">
-                          <input
-                            type="checkbox"
-                            checked={field.isRequired}
-                            onChange={(event) =>
-                              updateEditingField(field.id, (prev) => ({
-                                ...prev,
-                                isRequired: event.target.checked,
-                              }))
-                            }
-                          />
-                          مطلوب
-                        </label>
-                        <label className="inline-flex items-center gap-2">
-                          <input
-                            type="checkbox"
-                            checked={field.isVisible}
-                            onChange={(event) =>
-                              updateEditingField(field.id, (prev) => ({
-                                ...prev,
-                                isVisible: event.target.checked,
-                              }))
-                            }
-                          />
-                          ظاهر
-                        </label>
-                        <button
-                          onClick={() => removeEditingField(field.id)}
-                          className="rounded-md border border-red-200 p-1.5 text-red-700 hover:bg-red-50"
-                          title="حذف الحقل"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <div className="space-y-3 rounded-lg border border-slate-200 p-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="font-semibold text-slate-900">أعمدة الجداول</h3>
-                  <Button size="sm" variant="outline" leftIcon={<Plus className="h-4 w-4" />} onClick={addEditingColumn}>
-                    إضافة عمود
-                  </Button>
-                </div>
-
-                {editingPage.tableColumns.map((column) => (
-                  <div key={column.id} className="rounded-md border border-slate-200 p-3">
-                    <div className="grid gap-2 md:grid-cols-2">
-                      <input
-                        className="h-9 rounded-md border border-slate-200 px-2 text-sm"
-                        value={column.label}
-                        onChange={(event) =>
-                          updateEditingColumn(column.id, (prev) => ({ ...prev, label: event.target.value }))
-                        }
-                        placeholder="اسم العمود"
-                      />
-                      <input
-                        className="h-9 rounded-md border border-slate-200 px-2 text-sm"
-                        value={column.key}
-                        onChange={(event) =>
-                          updateEditingColumn(column.id, (prev) => ({ ...prev, key: event.target.value }))
-                        }
-                        placeholder="columnKey"
-                      />
-                      <div className="flex items-center gap-3 text-sm md:col-span-2">
-                        <label className="inline-flex items-center gap-2">
-                          <input
-                            type="checkbox"
-                            checked={column.isRequired}
-                            onChange={(event) =>
-                              updateEditingColumn(column.id, (prev) => ({
-                                ...prev,
-                                isRequired: event.target.checked,
-                              }))
-                            }
-                          />
-                          مطلوب
-                        </label>
-                        <label className="inline-flex items-center gap-2">
-                          <input
-                            type="checkbox"
-                            checked={column.isVisible}
-                            onChange={(event) =>
-                              updateEditingColumn(column.id, (prev) => ({
-                                ...prev,
-                                isVisible: event.target.checked,
-                              }))
-                            }
-                          />
-                          ظاهر
-                        </label>
-                        <button
-                          onClick={() => removeEditingColumn(column.id)}
-                          className="rounded-md border border-red-200 p-1.5 text-red-700 hover:bg-red-50"
-                          title="حذف العمود"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-      </AppModal>
 
       {!isHydrated && (
         <p className="text-xs text-slate-500">جاري تحميل الإعدادات المخزنة...</p>

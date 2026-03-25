@@ -73,7 +73,6 @@ interface SalesOrder {
   total: number;
   itemCount: number;
   status: "new" | "processing" | "completed";
-  customFields?: Record<string, string>;
 }
 
 interface ShippingCompany {
@@ -111,23 +110,6 @@ const posProducts: PosLineItem[] = [
   { id: "pos_pr_4", productId: "pos_pr_4", name: "Onboarding Pack", sku: "ONB-PACK", price: 650, quantity: 1 },
   { id: "pos_pr_5", productId: "pos_pr_5", name: "WhatsApp Integration", sku: "WA-INT", price: 420, quantity: 1 },
 ];
-
-const BUILTIN_ORDER_FIELD_KEYS = new Set([
-  "receiverName",
-  "receiverPhone",
-  "receiverCity",
-  "deliveryNotes",
-]);
-
-const BUILTIN_ORDER_COLUMN_KEYS = new Set([
-  "orderNo",
-  "invoiceNo",
-  "customerName",
-  "date",
-  "total",
-  "shippingCost",
-  "status",
-]);
 
 /**
  * Reads and parses localStorage array payload safely.
@@ -178,7 +160,6 @@ export function EnterpriseOrdersManager() {
   const [editReceiverCity, setEditReceiverCity] = useState("");
   const [editReceivedAmount, setEditReceivedAmount] = useState("");
   const [editDeliveryNotes, setEditDeliveryNotes] = useState("");
-  const [editCustomFieldValues, setEditCustomFieldValues] = useState<Record<string, string>>({});
   const [pageSettings, setPageSettings] = useState<GeneralPageRule | null>(null);
 
   useEffect(() => {
@@ -302,22 +283,6 @@ export function EnterpriseOrdersManager() {
     return Math.max(0, editGrandTotal - editSafeReceivedAmount);
   }, [editGrandTotal, editPaymentMethod, editSafeReceivedAmount]);
 
-  const dynamicOrderFields = useMemo(
-    () =>
-      (pageSettings?.fields ?? []).filter(
-        (field) => field.isVisible !== false && !BUILTIN_ORDER_FIELD_KEYS.has(field.key)
-      ),
-    [pageSettings]
-  );
-
-  const dynamicOrderColumns = useMemo(
-    () =>
-      (pageSettings?.tableColumns ?? []).filter(
-        (column) => column.isVisible !== false && !BUILTIN_ORDER_COLUMN_KEYS.has(column.key)
-      ),
-    [pageSettings]
-  );
-
   const columns = useMemo<Column<SalesOrder>[]>(() => {
     const baseColumns: Array<Column<SalesOrder> & { keyName: string }> = [
       { keyName: "orderNo", header: getColumnLabel(pageSettings, "orderNo", "رقم الطلب"), accessor: "orderNo" },
@@ -397,22 +362,14 @@ export function EnterpriseOrdersManager() {
       },
     ];
 
-    const customColumns: Array<Column<SalesOrder> & { keyName: string }> = dynamicOrderColumns.map((column) => ({
-      keyName: column.key,
-      header: getColumnLabel(pageSettings, column.key, column.label || column.key),
-      accessor: (row) => row.customFields?.[column.key] || "-",
-    }));
-
-    const mergedColumns = [...baseColumns, ...customColumns];
-
     if (!pageSettings) {
-      return mergedColumns.map(({ keyName: _keyName, ...column }) => column);
+      return baseColumns.map(({ keyName: _keyName, ...column }) => column);
     }
 
-    return mergedColumns
+    return baseColumns
       .filter((column) => column.keyName === "actions" || isColumnVisible(pageSettings, column.keyName))
       .map(({ keyName: _keyName, ...column }) => column);
-  }, [invoices, canDelete, canEdit, pageSettings, dynamicOrderColumns]);
+  }, [invoices, canDelete, canEdit, pageSettings]);
 
   /**
    * Builds details page URL for the invoice.
@@ -596,17 +553,6 @@ export function EnterpriseOrdersManager() {
     setEditReceiverCity(order.receiverCity ?? "");
     setEditReceivedAmount(String(order.receivedAmount ?? 0));
     setEditDeliveryNotes(order.deliveryNotes ?? "");
-    setEditCustomFieldValues(order.customFields ?? {});
-  }
-
-  /**
-   * Updates one dynamic custom field value in order edit modal.
-   */
-  function handleEditCustomFieldChange(fieldKey: string, value: string) {
-    setEditCustomFieldValues((prev) => ({
-      ...prev,
-      [fieldKey]: value,
-    }));
   }
 
   /**
@@ -653,18 +599,6 @@ export function EnterpriseOrdersManager() {
     for (const check of requiredChecks) {
       if (isFieldRequired(pageSettings, check.key) && !check.valid) {
         toast.error(check.message);
-        return;
-      }
-    }
-
-    for (const field of dynamicOrderFields) {
-      if (!field.isRequired) {
-        continue;
-      }
-
-      const value = editCustomFieldValues[field.key];
-      if (!value || !value.trim()) {
-        toast.error(`الحقل ${field.label} مطلوب`);
         return;
       }
     }
@@ -733,7 +667,6 @@ export function EnterpriseOrdersManager() {
               paymentMethod: editPaymentMethod,
               total: editGrandTotal,
               itemCount: editItems.reduce((sum, item) => sum + item.quantity, 0),
-              customFields: editCustomFieldValues,
             }
           : order
       )
@@ -1092,63 +1025,6 @@ export function EnterpriseOrdersManager() {
                   onChange={(event) => setEditReceiverCity(event.target.value)}
                 />
               </div>
-              {dynamicOrderFields.map((field) => {
-                if (field.type === "textarea") {
-                  return (
-                    <div key={field.id} className="md:col-span-2">
-                      <p className="mb-1 text-xs font-medium text-slate-600">{field.label}</p>
-                      <textarea
-                        className="min-h-[80px] w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                        value={editCustomFieldValues[field.key] ?? ""}
-                        onChange={(event) => handleEditCustomFieldChange(field.key, event.target.value)}
-                      />
-                    </div>
-                  );
-                }
-
-                if (field.type === "select") {
-                  return (
-                    <div key={field.id}>
-                      <p className="mb-1 text-xs font-medium text-slate-600">{field.label}</p>
-                      <select
-                        className="h-9 w-full rounded-lg border border-slate-200 px-2 text-sm"
-                        value={editCustomFieldValues[field.key] ?? ""}
-                        onChange={(event) => handleEditCustomFieldChange(field.key, event.target.value)}
-                      >
-                        <option value="">اختر {field.label}</option>
-                        {(field.options ?? []).map((option) => (
-                          <option key={option} value={option}>
-                            {option}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  );
-                }
-
-                const htmlInputType: "text" | "number" | "date" | "email" | "tel" =
-                  field.type === "number"
-                    ? "number"
-                    : field.type === "date"
-                      ? "date"
-                      : field.type === "email"
-                        ? "email"
-                        : field.type === "phone"
-                          ? "tel"
-                          : "text";
-
-                return (
-                  <div key={field.id}>
-                    <p className="mb-1 text-xs font-medium text-slate-600">{field.label}</p>
-                    <input
-                      type={htmlInputType}
-                      className="h-9 w-full rounded-lg border border-slate-200 px-2 text-sm"
-                      value={editCustomFieldValues[field.key] ?? ""}
-                      onChange={(event) => handleEditCustomFieldChange(field.key, event.target.value)}
-                    />
-                  </div>
-                );
-              })}
             </div>
 
               <p className="text-sm font-semibold text-slate-800">بنود الفاتورة</p>
