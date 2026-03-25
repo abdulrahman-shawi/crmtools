@@ -16,6 +16,7 @@ import {
   getFieldLabel,
   isColumnVisible,
   isFieldRequired,
+  isFieldVisible,
   readGeneralPageSettings,
   type GeneralPageRule,
 } from "@/lib/crm-general-settings";
@@ -663,7 +664,8 @@ export function EnterpriseReturnsManager() {
         description="رتب إدخال البيانات: نوع المرتجع، العميل، المنتج، الكمية، ثم السبب والمرحلة."
       >
         <div className="grid gap-4 md:grid-cols-2">
-          <div className="space-y-2 md:col-span-2">
+          {isFieldVisible(pageSettings, "returnType") && (
+            <div className="space-y-2 md:col-span-2">
             <label className="text-sm font-medium text-slate-700">نوع المرتجع</label>
             <select
               className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm"
@@ -680,8 +682,9 @@ export function EnterpriseReturnsManager() {
               <option value="refund">ترجيع</option>
             </select>
           </div>
-
-          <div className="space-y-2 md:col-span-2">
+          )}
+          {isFieldVisible(pageSettings, "customer") && (
+            <div className="space-y-2 md:col-span-2">
             <label className="text-sm font-medium text-slate-700">اسم العميل</label>
             <input
               type="text"
@@ -691,6 +694,7 @@ export function EnterpriseReturnsManager() {
               placeholder={getFieldLabel(pageSettings, "customer", "اسم العميل")}
             />
           </div>
+          )}
 
           <div className="space-y-2 md:col-span-2">
             <label className="text-sm font-medium text-slate-700">اختيار المنتج</label>
@@ -747,7 +751,8 @@ export function EnterpriseReturnsManager() {
             )}
           </div>
 
-          <div className="space-y-2 md:col-span-2">
+          {isFieldVisible(pageSettings, "returnedQuantity") && (
+            <div className="space-y-2 md:col-span-2">
             <label className="text-sm font-medium text-slate-700">الكمية المرتجعة</label>
             <input
               type="number"
@@ -758,6 +763,7 @@ export function EnterpriseReturnsManager() {
               placeholder="مثال: 2"
             />
           </div>
+          )}
 
           {formState.returnType === "replacement" && (
             <>
@@ -824,7 +830,8 @@ export function EnterpriseReturnsManager() {
             </>
           )}
 
-          <div className="space-y-2 md:col-span-2">
+          {isFieldVisible(pageSettings, "reason") && (
+            <div className="space-y-2 md:col-span-2">
             <label className="text-sm font-medium text-slate-700">سبب المرتجع</label>
             <textarea
               rows={3}
@@ -834,6 +841,7 @@ export function EnterpriseReturnsManager() {
               placeholder={getFieldLabel(pageSettings, "reason", "اكتب سبب المرتجع...")}
             />
           </div>
+          )}
 
           <div className="space-y-2">
             <label className="text-sm font-medium text-slate-700">مرحلة المرتجع</label>

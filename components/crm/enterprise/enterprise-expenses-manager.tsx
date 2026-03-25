@@ -13,8 +13,10 @@ import { SectionHeader } from "@/components/ui/section-header";
 import {
   GENERAL_SETTINGS_UPDATED_EVENT,
   getColumnLabel,
+  getFieldLabel,
   isColumnVisible,
   isFieldRequired,
+  isFieldVisible,
   readGeneralPageSettings,
   type GeneralPageRule,
 } from "@/lib/crm-general-settings";
@@ -1048,12 +1050,14 @@ export function EnterpriseExpensesManager() {
 
           {formState.type === "general" ? (
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              <input
+              {isFieldVisible(pageSettings, "expenseName") && (
+                <input
                 className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
-                placeholder="اسم المصروف"
+                placeholder={getFieldLabel(pageSettings, "expenseName", "اسم المصروف")}
                 value={formState.expenseName}
                 onChange={(event) => setFormState((prev) => ({ ...prev, expenseName: event.target.value }))}
               />
+              )}
               <input
                 type="number"
                 min={1}
@@ -1079,23 +1083,27 @@ export function EnterpriseExpensesManager() {
                 <option value="monthly">شهري</option>
                 <option value="yearly">سنوي</option>
               </select>
-              <textarea
+              {isFieldVisible(pageSettings, "notes") && (
+                <textarea
                 className="min-h-[100px] rounded-lg border border-slate-200 px-3 py-2 text-sm md:col-span-2"
-                placeholder="ملاحظات"
+                placeholder={getFieldLabel(pageSettings, "notes", "ملاحظات")}
                 value={formState.generalNotes}
                 onChange={(event) => setFormState((prev) => ({ ...prev, generalNotes: event.target.value }))}
               />
+              )}
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
               <div className="space-y-3 rounded-lg border border-slate-200 p-3">
                 <p className="text-sm font-semibold text-slate-800">بيانات شراء البضاعة</p>
-                <input
+                {isFieldVisible(pageSettings, "supplierName") && (
+                  <input
                   className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm"
-                  placeholder="اسم المورد"
+                  placeholder={getFieldLabel(pageSettings, "supplierName", "اسم المورد")}
                   value={formState.supplierName}
                   onChange={(event) => setFormState((prev) => ({ ...prev, supplierName: event.target.value }))}
                 />
+                )}
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                   <select
                     className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
@@ -1194,12 +1202,14 @@ export function EnterpriseExpensesManager() {
                   </div>
                 </div>
 
-                <textarea
+                {isFieldVisible(pageSettings, "notes") && (
+                  <textarea
                   className="min-h-[90px] w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                  placeholder="ملاحظات عامة"
+                  placeholder={getFieldLabel(pageSettings, "notes", "ملاحظات عامة")}
                   value={formState.purchaseNotes}
                   onChange={(event) => setFormState((prev) => ({ ...prev, purchaseNotes: event.target.value }))}
                 />
+                )}
               </div>
 
               <div className="space-y-3 rounded-lg border border-slate-200 p-3">

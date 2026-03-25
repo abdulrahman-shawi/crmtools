@@ -16,6 +16,7 @@ import {
   getFieldLabel,
   isColumnVisible,
   isFieldRequired,
+  isFieldVisible,
   readGeneralPageSettings,
   type GeneralPageRule,
 } from "@/lib/crm-general-settings";
@@ -1001,7 +1002,8 @@ export function EnterpriseOrdersManager() {
 
           <div className="space-y-3 rounded-lg border border-slate-200 p-3">
             <div className="grid grid-cols-1 gap-2 rounded-lg border border-slate-200 bg-white p-3 md:grid-cols-2">
-              <div>
+              {isFieldVisible(pageSettings, "receiverName") && (
+                <div>
                 <p className="mb-1 text-xs font-medium text-slate-600">{getFieldLabel(pageSettings, "receiverName", "اسم المستلم")}</p>
                 <input
                   className="h-9 w-full rounded-lg border border-slate-200 px-2 text-sm"
@@ -1009,7 +1011,9 @@ export function EnterpriseOrdersManager() {
                   onChange={(event) => setEditReceiverName(event.target.value)}
                 />
               </div>
-              <div>
+              )}
+              {isFieldVisible(pageSettings, "receiverPhone") && (
+                <div>
                 <p className="mb-1 text-xs font-medium text-slate-600">{getFieldLabel(pageSettings, "receiverPhone", "رقم المستلم")}</p>
                 <input
                   className="h-9 w-full rounded-lg border border-slate-200 px-2 text-sm"
@@ -1017,7 +1021,9 @@ export function EnterpriseOrdersManager() {
                   onChange={(event) => setEditReceiverPhone(event.target.value)}
                 />
               </div>
-              <div className="md:col-span-2">
+              )}
+              {isFieldVisible(pageSettings, "receiverCity") && (
+                <div className="md:col-span-2">
                 <p className="mb-1 text-xs font-medium text-slate-600">{getFieldLabel(pageSettings, "receiverCity", "مدينة الاستلام")}</p>
                 <input
                   className="h-9 w-full rounded-lg border border-slate-200 px-2 text-sm"
@@ -1025,6 +1031,7 @@ export function EnterpriseOrdersManager() {
                   onChange={(event) => setEditReceiverCity(event.target.value)}
                 />
               </div>
+              )}
             </div>
 
               <p className="text-sm font-semibold text-slate-800">بنود الفاتورة</p>
@@ -1155,7 +1162,8 @@ export function EnterpriseOrdersManager() {
               </div>
             ) : null}
 
-            <div>
+            {isFieldVisible(pageSettings, "deliveryNotes") && (
+              <div>
               <p className="mb-1 text-xs font-medium text-slate-600">{getFieldLabel(pageSettings, "deliveryNotes", "ملاحظات التسليم")}</p>
               <textarea
                 className="min-h-[80px] w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
@@ -1163,6 +1171,7 @@ export function EnterpriseOrdersManager() {
                 onChange={(event) => setEditDeliveryNotes(event.target.value)}
               />
             </div>
+            )}
           </div>
         </div>
       </AppModal>

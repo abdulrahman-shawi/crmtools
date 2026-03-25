@@ -16,6 +16,7 @@ import {
   getFieldLabel,
   isColumnVisible,
   isFieldRequired,
+  isFieldVisible,
   readGeneralPageSettings,
   type GeneralPageRule,
 } from "@/lib/crm-general-settings";
@@ -494,12 +495,14 @@ export function EnterpriseWarehousesManager() {
               </option>
             ))}
           </select>
-          <textarea
-            className="min-h-[100px] rounded-lg border border-slate-200 px-3 py-2 text-sm"
-            placeholder={getFieldLabel(pageSettings, "notes", "ملاحظات")}
-            value={formState.notes}
-            onChange={(event) => setFormState((prev) => ({ ...prev, notes: event.target.value }))}
-          />
+          {isFieldVisible(pageSettings, "notes") && (
+            <textarea
+              className="min-h-[100px] rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              placeholder={getFieldLabel(pageSettings, "notes", "ملاحظات")}
+              value={formState.notes}
+              onChange={(event) => setFormState((prev) => ({ ...prev, notes: event.target.value }))}
+            />
+          )}
         </div>
       </AppModal>
     </section>

@@ -16,6 +16,7 @@ import {
   getFieldLabel,
   isColumnVisible,
   isFieldRequired,
+  isFieldVisible,
   readGeneralPageSettings,
   type GeneralPageRule,
 } from "@/lib/crm-general-settings";
@@ -338,40 +339,50 @@ export function EnterpriseShippingCompaniesManager() {
         }
       >
         <div className="grid grid-cols-1 gap-3">
-          <input
-            className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
-            placeholder={getFieldLabel(pageSettings, "company", "اسم الشركة")}
-            value={formState.company}
-            onChange={(event) => setFormState((prev) => ({ ...prev, company: event.target.value }))}
-          />
-          <input
-            className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
-            placeholder={getFieldLabel(pageSettings, "serviceLevel", "مستوى الخدمة")}
-            value={formState.serviceLevel}
-            onChange={(event) => setFormState((prev) => ({ ...prev, serviceLevel: event.target.value }))}
-          />
-          <input
-            className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
-            placeholder={getFieldLabel(pageSettings, "region", "النطاق")}
-            value={formState.region}
-            onChange={(event) => setFormState((prev) => ({ ...prev, region: event.target.value }))}
-          />
-          <input
-            type="number"
-            min={0}
-            className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
-            placeholder={getFieldLabel(pageSettings, "avgCost", "متوسط تكلفة الشحنة")}
-            value={formState.avgCost}
-            onChange={(event) => setFormState((prev) => ({ ...prev, avgCost: event.target.value }))}
-          />
-          <input
-            type="number"
-            min={0}
-            className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
-            placeholder={getFieldLabel(pageSettings, "sla", "SLA يوم")}
-            value={formState.sla}
-            onChange={(event) => setFormState((prev) => ({ ...prev, sla: event.target.value }))}
-          />
+          {isFieldVisible(pageSettings, "company") && (
+            <input
+              className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
+              placeholder={getFieldLabel(pageSettings, "company", "اسم الشركة")}
+              value={formState.company}
+              onChange={(event) => setFormState((prev) => ({ ...prev, company: event.target.value }))}
+            />
+          )}
+          {isFieldVisible(pageSettings, "serviceLevel") && (
+            <input
+              className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
+              placeholder={getFieldLabel(pageSettings, "serviceLevel", "مستوى الخدمة")}
+              value={formState.serviceLevel}
+              onChange={(event) => setFormState((prev) => ({ ...prev, serviceLevel: event.target.value }))}
+            />
+          )}
+          {isFieldVisible(pageSettings, "region") && (
+            <input
+              className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
+              placeholder={getFieldLabel(pageSettings, "region", "النطاق")}
+              value={formState.region}
+              onChange={(event) => setFormState((prev) => ({ ...prev, region: event.target.value }))}
+            />
+          )}
+          {isFieldVisible(pageSettings, "avgCost") && (
+            <input
+              type="number"
+              min={0}
+              className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
+              placeholder={getFieldLabel(pageSettings, "avgCost", "متوسط تكلفة الشحنة")}
+              value={formState.avgCost}
+              onChange={(event) => setFormState((prev) => ({ ...prev, avgCost: event.target.value }))}
+            />
+          )}
+          {isFieldVisible(pageSettings, "sla") && (
+            <input
+              type="number"
+              min={0}
+              className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
+              placeholder={getFieldLabel(pageSettings, "sla", "SLA يوم")}
+              value={formState.sla}
+              onChange={(event) => setFormState((prev) => ({ ...prev, sla: event.target.value }))}
+            />
+          )}
         </div>
       </AppModal>
     </section>

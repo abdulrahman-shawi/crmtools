@@ -138,6 +138,22 @@ export function isFieldRequired(page: GeneralPageRule | null, fieldKey: string):
 }
 
 /**
+ * Returns true when a specific field key is visible (defaults to true when no settings exist).
+ */
+export function isFieldVisible(page: GeneralPageRule | null, fieldKey: string): boolean {
+  if (!page) {
+    return true;
+  }
+
+  const field = page.fields?.find((item) => item.key === fieldKey);
+  if (!field) {
+    return true;
+  }
+
+  return field.isVisible !== false;
+}
+
+/**
  * Returns true when a specific table column key is marked visible.
  */
 export function isColumnVisible(page: GeneralPageRule | null, columnKey: string): boolean {

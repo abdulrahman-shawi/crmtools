@@ -13,8 +13,10 @@ import { SectionHeader } from "@/components/ui/section-header";
 import {
   GENERAL_SETTINGS_UPDATED_EVENT,
   getColumnLabel,
+  getFieldLabel,
   isColumnVisible,
   isFieldRequired,
+  isFieldVisible,
   readGeneralPageSettings,
   type GeneralPageRule,
 } from "@/lib/crm-general-settings";
@@ -654,8 +656,9 @@ export function EnterpriseWarehouseMovementsManager() {
           </div>
 
           {/* Source Warehouse Selection */}
-          <div>
-            <label className="block text-sm font-semibold text-slate-800 mb-2">مخزن المصدر</label>
+          {isFieldVisible(pageSettings, "fromWarehouseId") && (
+            <div>
+            <label className="block text-sm font-semibold text-slate-800 mb-2">{getFieldLabel(pageSettings, "fromWarehouseId", "مخزن المصدر")}</label>
             <select
               value={transferFormState.fromWarehouseId}
               onChange={(event) =>
@@ -676,11 +679,13 @@ export function EnterpriseWarehouseMovementsManager() {
                     </option>
                   ))}
             </select>
-          </div>
+            </div>
+          )}
 
           {/* Destination Warehouse Selection */}
-          <div>
-            <label className="block text-sm font-semibold text-slate-800 mb-2">مخزن القصد</label>
+          {isFieldVisible(pageSettings, "toWarehouseId") && (
+            <div>
+            <label className="block text-sm font-semibold text-slate-800 mb-2">{getFieldLabel(pageSettings, "toWarehouseId", "مخزن القصد")}</label>
             <select
               value={transferFormState.toWarehouseId}
               onChange={(event) =>
@@ -700,7 +705,8 @@ export function EnterpriseWarehouseMovementsManager() {
                   </option>
                 ))}
             </select>
-          </div>
+            </div>
+          )}
 
           {/* Quantity */}
           <div>
@@ -733,8 +739,9 @@ export function EnterpriseWarehouseMovementsManager() {
           </div>
 
           {/* Notes */}
-          <div>
-            <label className="block text-sm font-semibold text-slate-800 mb-2">ملاحظات</label>
+          {isFieldVisible(pageSettings, "notes") && (
+            <div>
+            <label className="block text-sm font-semibold text-slate-800 mb-2">{getFieldLabel(pageSettings, "notes", "ملاحظات")}</label>
             <textarea
               value={transferFormState.notes}
               onChange={(event) =>
@@ -747,7 +754,8 @@ export function EnterpriseWarehouseMovementsManager() {
               className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
               rows={3}
             />
-          </div>
+            </div>
+          )}
 
           {/* Action Buttons */}
           <div className="flex gap-2 pt-4">

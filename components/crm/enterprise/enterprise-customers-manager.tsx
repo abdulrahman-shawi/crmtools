@@ -20,6 +20,7 @@ import {
   getFieldLabel,
   isColumnVisible,
   isFieldRequired,
+  isFieldVisible,
   readGeneralPageSettings,
   type GeneralPageRule,
 } from "@/lib/crm-general-settings";
@@ -1454,13 +1455,16 @@ export function EnterpriseCustomersManager() {
         }
       >
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          <input
+          {isFieldVisible(pageSettings, "companyName") && (
+            <input
             className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
             placeholder={getFieldLabel(pageSettings, "companyName", "اسم الشركة")}
             value={formState.companyName}
             onChange={(event) => setFormState((prev) => ({ ...prev, companyName: event.target.value }))}
           />
-          <select
+          )}
+          {isFieldVisible(pageSettings, "companySize") && (
+            <select
             className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
             value={formState.companySize}
             onChange={(event) =>
@@ -1470,13 +1474,17 @@ export function EnterpriseCustomersManager() {
             <option value="medium">متوسطة</option>
             <option value="large">كبيرة</option>
           </select>
-          <input
+          )}
+          {isFieldVisible(pageSettings, "industry") && (
+            <input
             className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
             placeholder={getFieldLabel(pageSettings, "industry", "القطاع")}
             value={formState.industry}
             onChange={(event) => setFormState((prev) => ({ ...prev, industry: event.target.value }))}
           />
-          <div className="space-y-2 rounded-lg border border-slate-200 p-3 md:col-span-2">
+          )}
+          {isFieldVisible(pageSettings, "contactPersons") && (
+            <div className="space-y-2 rounded-lg border border-slate-200 p-3 md:col-span-2">
             <p className="text-xs text-slate-600">{getFieldLabel(pageSettings, "contactPersons", "مسؤول التواصل")} (Checkbox - يمكن اختيار أكثر من مسؤول)</p>
             <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
               {contactOwnerOptions.map((owner) => (
@@ -1492,7 +1500,9 @@ export function EnterpriseCustomersManager() {
               ))}
             </div>
           </div>
-          <select
+          )}
+          {isFieldVisible(pageSettings, "country") && (
+            <select
             className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
             value={formState.country}
             onChange={(event) => setFormState((prev) => ({ ...prev, country: event.target.value as CountryCode }))}
@@ -1503,13 +1513,17 @@ export function EnterpriseCustomersManager() {
               </option>
             ))}
           </select>
-          <input
+          )}
+          {isFieldVisible(pageSettings, "city") && (
+            <input
             className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
             placeholder={getFieldLabel(pageSettings, "city", "المدينة")}
             value={formState.city}
             onChange={(event) => setFormState((prev) => ({ ...prev, city: event.target.value }))}
           />
-          <div className="md:col-span-2">
+          )}
+          {isFieldVisible(pageSettings, "phone") && (
+            <div className="md:col-span-2">
             <p className="mb-1 text-xs text-slate-600">{getFieldLabel(pageSettings, "phone", "رقم التواصل")} (مع رمز الدولة)</p>
             <div className="flex h-10 items-center gap-2 rounded-lg border border-slate-200 px-3 text-sm">
               <span className="text-slate-500">+{getCountryCallingCode(formState.country)}</span>
@@ -1522,14 +1536,18 @@ export function EnterpriseCustomersManager() {
               />
             </div>
           </div>
-          <input
+          )}
+          {isFieldVisible(pageSettings, "email") && (
+            <input
             type="email"
             className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
             placeholder={getFieldLabel(pageSettings, "email", "البريد الإلكتروني")}
             value={formState.email}
             onChange={(event) => setFormState((prev) => ({ ...prev, email: event.target.value }))}
           />
-          <select
+          )}
+          {isFieldVisible(pageSettings, "status") && (
+            <select
             className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
             value={formState.status}
             onChange={(event) =>
@@ -1540,7 +1558,9 @@ export function EnterpriseCustomersManager() {
             <option value="active">نشط</option>
             <option value="at-risk">معرّض للفقد</option>
           </select>
-          <select
+          )}
+          {isFieldVisible(pageSettings, "tier") && (
+            <select
             className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
             value={formState.tier}
             onChange={(event) =>
@@ -1551,31 +1571,40 @@ export function EnterpriseCustomersManager() {
             <option value="silver">فضي</option>
             <option value="bronze">برونزي</option>
           </select>
-          <input
+          )}
+          {isFieldVisible(pageSettings, "annualValue") && (
+            <input
             type="number"
             className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
             placeholder="القيمة السنوية"
             value={formState.annualValue}
             onChange={(event) => setFormState((prev) => ({ ...prev, annualValue: event.target.value }))}
           />
-          <input
+          )}
+          {isFieldVisible(pageSettings, "lastCommunication") && (
+            <input
             className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
             placeholder="آخر تواصل"
             value={formState.lastCommunication}
             onChange={(event) => setFormState((prev) => ({ ...prev, lastCommunication: event.target.value }))}
           />
-          <input
+          )}
+          {isFieldVisible(pageSettings, "nextFollowUp") && (
+            <input
             type="date"
             className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
             value={formState.nextFollowUp}
             onChange={(event) => setFormState((prev) => ({ ...prev, nextFollowUp: event.target.value }))}
           />
-          <textarea
+          )}
+          {isFieldVisible(pageSettings, "notes") && (
+            <textarea
             className="min-h-[90px] rounded-lg border border-slate-200 px-3 py-2 text-sm md:col-span-2"
             placeholder="ملاحظات"
             value={formState.notes}
             onChange={(event) => setFormState((prev) => ({ ...prev, notes: event.target.value }))}
           />
+          )}
         </div>
       </AppModal>
 

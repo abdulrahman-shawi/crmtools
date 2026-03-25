@@ -16,6 +16,7 @@ import {
   getFieldLabel,
   isColumnVisible,
   isFieldRequired,
+  isFieldVisible,
   readGeneralPageSettings,
   type GeneralPageRule,
 } from "@/lib/crm-general-settings";
@@ -1029,13 +1030,16 @@ export function EnterpriseProductsManager() {
 
           {formState.entryType === "category" ? (
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              <input
+              {isFieldVisible(pageSettings, "categoryName") && (
+                <input
                 className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
                 placeholder={getFieldLabel(pageSettings, "categoryName", "اسم التصنيف")}
                 value={formState.categoryName}
                 onChange={(event) => setFormState((prev) => ({ ...prev, categoryName: event.target.value }))}
               />
-              <select
+              )}
+              {isFieldVisible(pageSettings, "categoryWarehouseId") && (
+                <select
                 className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
                 value={formState.categoryWarehouseId}
                 onChange={(event) => setFormState((prev) => ({ ...prev, categoryWarehouseId: event.target.value }))}
@@ -1047,6 +1051,7 @@ export function EnterpriseProductsManager() {
                   </option>
                 ))}
               </select>
+              )}
               <div>
                 <p className="mb-1 text-xs text-slate-600">لون التصنيف</p>
                 <input
@@ -1056,22 +1061,27 @@ export function EnterpriseProductsManager() {
                   onChange={(event) => setFormState((prev) => ({ ...prev, categoryColor: event.target.value }))}
                 />
               </div>
-              <textarea
+              {isFieldVisible(pageSettings, "categoryNotes") && (
+                <textarea
                 className="min-h-[100px] rounded-lg border border-slate-200 px-3 py-2 text-sm md:col-span-2"
                 placeholder="ملاحظات التصنيف"
                 value={formState.categoryNotes}
                 onChange={(event) => setFormState((prev) => ({ ...prev, categoryNotes: event.target.value }))}
               />
+              )}
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              <input
+              {isFieldVisible(pageSettings, "productName") && (
+                <input
                 className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
                 placeholder={getFieldLabel(pageSettings, "productName", "اسم المنتج")}
                 value={formState.productName}
                 onChange={(event) => setFormState((prev) => ({ ...prev, productName: event.target.value }))}
               />
-              <select
+              )}
+              {isFieldVisible(pageSettings, "productCategoryName") && (
+                <select
                 className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
                 value={formState.productCategoryName}
                 onChange={(event) => setFormState((prev) => ({ ...prev, productCategoryName: event.target.value }))}
@@ -1083,6 +1093,7 @@ export function EnterpriseProductsManager() {
                   </option>
                 ))}
               </select>
+              )}
               <input
                 type="number"
                 className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
@@ -1104,12 +1115,14 @@ export function EnterpriseProductsManager() {
                 value={formState.wholesalePrice}
                 onChange={(event) => setFormState((prev) => ({ ...prev, wholesalePrice: event.target.value }))}
               />
-              <textarea
+              {isFieldVisible(pageSettings, "notes") && (
+                <textarea
                 className="min-h-[90px] rounded-lg border border-slate-200 px-3 py-2 text-sm md:col-span-2"
                 placeholder="ملاحظات المنتج"
                 value={formState.notes}
                 onChange={(event) => setFormState((prev) => ({ ...prev, notes: event.target.value }))}
               />
+              )}
 
               <div className="space-y-3 rounded-lg border border-slate-200 p-3 md:col-span-2">
                 <p className="text-sm font-semibold text-slate-700">ألوان المنتج مع السعر</p>
