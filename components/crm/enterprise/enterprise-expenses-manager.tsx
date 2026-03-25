@@ -10,6 +10,14 @@ import { AppModal } from "@/components/ui/app-modal";
 import { Button } from "@/components/ui/button";
 import DynamicCard from "@/components/ui/dynamicCard";
 import { SectionHeader } from "@/components/ui/section-header";
+import {
+  GENERAL_SETTINGS_UPDATED_EVENT,
+  getColumnLabel,
+  isColumnVisible,
+  isFieldRequired,
+  readGeneralPageSettings,
+  type GeneralPageRule,
+} from "@/lib/crm-general-settings";
 
 type ExpenseType = "general" | "purchase";
 type GeneralExpensePeriod = "daily" | "monthly" | "yearly";
@@ -418,6 +426,22 @@ export function EnterpriseExpensesManager() {
   const [dateTo, setDateTo] = useState("");
   const [generalPeriodFilter, setGeneralPeriodFilter] = useState<"all" | GeneralExpensePeriod>("all");
   const [generalFilterVisible, setGeneralFilterVisible] = useState(true);
+  const [pageSettings, setPageSettings] = useState<GeneralPageRule | null>(null);
+
+  useEffect(() => {
+    const applySettings = () => {
+      setPageSettings(readGeneralPageSettings("expenses"));
+    };
+
+    applySettings();
+    window.addEventListener("storage", applySettings);
+    window.addEventListener(GENERAL_SETTINGS_UPDATED_EVENT, applySettings);
+
+    return () => {
+      window.removeEventListener("storage", applySettings);
+      window.removeEventListener(GENERAL_SETTINGS_UPDATED_EVENT, applySettings);
+    };
+  }, []);
 
   const purchaseSubtotal = useMemo(
     () => formState.items.reduce((sum, item) => sum + item.price * item.quantity, 0),
@@ -520,15 +544,17 @@ export function EnterpriseExpensesManager() {
   }, [rows]);
 
   const generalColumns = useMemo<Column<ExpenseRecord>[]>(
-    () => [
-      { header: "اسم المصروف", accessor: (row) => row.general?.expenseName ?? "-" },
-      { header: "الكمية", accessor: (row) => row.general?.expenseQuantity ?? 0 },
-      { header: "سعر المصروف", accessor: (row) => (row.general?.expensePrice ?? 0).toLocaleString() },
-      { header: "الإجمالي", accessor: (row) => row.totalAmount.toLocaleString() },
-      { header: "النوع", accessor: (row) => generalExpensePeriodLabel[row.general?.period ?? "daily"] },
-      { header: "ملاحظات", accessor: (row) => row.general?.notes ?? "-" },
-      { header: "التاريخ", accessor: "date" },
+    () => {
+      const baseColumns: Array<Column<ExpenseRecord> & { keyName: string }> = [
+      { keyName: "expenseName", header: getColumnLabel(pageSettings, "expenseName", "اسم المصروف"), accessor: (row) => row.general?.expenseName ?? "-" },
+      { keyName: "expenseQuantity", header: getColumnLabel(pageSettings, "expenseQuantity", "الكمية"), accessor: (row) => row.general?.expenseQuantity ?? 0 },
+      { keyName: "expensePrice", header: getColumnLabel(pageSettings, "expensePrice", "سعر المصروف"), accessor: (row) => (row.general?.expensePrice ?? 0).toLocaleString() },
+      { keyName: "totalAmount", header: getColumnLabel(pageSettings, "totalAmount", "الإجمالي"), accessor: (row) => row.totalAmount.toLocaleString() },
+      { keyName: "period", header: getColumnLabel(pageSettings, "period", "النوع"), accessor: (row) => generalExpensePeriodLabel[row.general?.period ?? "daily"] },
+      { keyName: "notes", header: getColumnLabel(pageSettings, "notes", "ملاحظات"), accessor: (row) => row.general?.notes ?? "-" },
+      { keyName: "date", header: getColumnLabel(pageSettings, "date", "التاريخ"), accessor: "date" },
       {
+        keyName: "actions",
         header: "الإجراءات",
         accessor: (row) => (
           <div className="flex items-center gap-1">
@@ -553,21 +579,32 @@ export function EnterpriseExpensesManager() {
           </div>
         ),
       },
-    ],
-    [canEdit, canDelete]
+    ];
+
+      if (!pageSettings) {
+        return baseColumns.map(({ keyName: _keyName, ...column }) => column);
+      }
+
+      return baseColumns
+        .filter((column) => column.keyName === "actions" || isColumnVisible(pageSettings, column.keyName))
+        .map(({ keyName: _keyName, ...column }) => column);
+    },
+    [canEdit, canDelete, pageSettings]
   );
 
   const purchaseColumns = useMemo<Column<ExpenseRecord>[]>(
-    () => [
-      { header: "المورد", accessor: (row) => row.purchase?.supplierName ?? "-" },
-      { header: "المنتجات", accessor: (row) => row.purchase?.items?.length ?? 0 },
-      { header: "طريقة الدفع", accessor: (row) => purchasePaymentMethodLabel[row.purchase?.paymentMethod ?? "bank_transfer"] },
-      { header: "مدفوع", accessor: (row) => (row.purchase?.paidAmount ?? 0).toLocaleString() },
-      { header: "متبقي", accessor: (row) => (row.purchase?.remainingAmount ?? 0).toLocaleString() },
-      { header: "الشحن", accessor: (row) => (row.purchase?.shippingCost ?? 0).toLocaleString() },
-      { header: "التاريخ", accessor: "date" },
-      { header: "الإجمالي", accessor: (row) => row.totalAmount.toLocaleString() },
+    () => {
+      const baseColumns: Array<Column<ExpenseRecord> & { keyName: string }> = [
+      { keyName: "supplierName", header: getColumnLabel(pageSettings, "supplierName", "المورد"), accessor: (row) => row.purchase?.supplierName ?? "-" },
+      { keyName: "itemsCount", header: getColumnLabel(pageSettings, "itemsCount", "المنتجات"), accessor: (row) => row.purchase?.items?.length ?? 0 },
+      { keyName: "paymentMethod", header: getColumnLabel(pageSettings, "paymentMethod", "طريقة الدفع"), accessor: (row) => purchasePaymentMethodLabel[row.purchase?.paymentMethod ?? "bank_transfer"] },
+      { keyName: "paidAmount", header: getColumnLabel(pageSettings, "paidAmount", "مدفوع"), accessor: (row) => (row.purchase?.paidAmount ?? 0).toLocaleString() },
+      { keyName: "remainingAmount", header: getColumnLabel(pageSettings, "remainingAmount", "متبقي"), accessor: (row) => (row.purchase?.remainingAmount ?? 0).toLocaleString() },
+      { keyName: "shippingCost", header: getColumnLabel(pageSettings, "shippingCost", "الشحن"), accessor: (row) => (row.purchase?.shippingCost ?? 0).toLocaleString() },
+      { keyName: "date", header: getColumnLabel(pageSettings, "date", "التاريخ"), accessor: "date" },
+      { keyName: "totalAmount", header: getColumnLabel(pageSettings, "totalAmount", "الإجمالي"), accessor: (row) => row.totalAmount.toLocaleString() },
       {
+        keyName: "actions",
         header: "الإجراءات",
         accessor: (row) => (
           <div className="flex items-center gap-1">
@@ -599,8 +636,17 @@ export function EnterpriseExpensesManager() {
           </div>
         ),
       },
-    ],
-    [canEdit, canDelete]
+    ];
+
+      if (!pageSettings) {
+        return baseColumns.map(({ keyName: _keyName, ...column }) => column);
+      }
+
+      return baseColumns
+        .filter((column) => column.keyName === "actions" || isColumnVisible(pageSettings, column.keyName))
+        .map(({ keyName: _keyName, ...column }) => column);
+    },
+    [canEdit, canDelete, pageSettings]
   );
 
   /**
@@ -733,7 +779,7 @@ export function EnterpriseExpensesManager() {
     const date = formState.date || new Date().toISOString().slice(0, 10);
 
     if (formState.type === "general") {
-      if (!formState.expenseName.trim()) {
+      if (isFieldRequired(pageSettings, "expenseName") && !formState.expenseName.trim()) {
         toast.error("اسم المصروف مطلوب");
         return;
       }
@@ -775,12 +821,12 @@ export function EnterpriseExpensesManager() {
         toast.success("تمت إضافة المصروف العام");
       }
     } else {
-      if (!formState.supplierName.trim()) {
+      if (isFieldRequired(pageSettings, "supplierName") && !formState.supplierName.trim()) {
         toast.error("اسم المورد مطلوب");
         return;
       }
 
-      if (!formState.city.trim()) {
+      if (isFieldRequired(pageSettings, "city") && !formState.city.trim()) {
         toast.error("مدينة الشراء مطلوبة");
         return;
       }

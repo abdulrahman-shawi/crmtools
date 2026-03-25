@@ -10,6 +10,14 @@ import { AppModal } from "@/components/ui/app-modal";
 import { Button } from "@/components/ui/button";
 import DynamicCard from "@/components/ui/dynamicCard";
 import { SectionHeader } from "@/components/ui/section-header";
+import {
+  GENERAL_SETTINGS_UPDATED_EVENT,
+  getColumnLabel,
+  isColumnVisible,
+  isFieldRequired,
+  readGeneralPageSettings,
+  type GeneralPageRule,
+} from "@/lib/crm-general-settings";
 
 interface WarehouseRecord {
   id: string;
@@ -95,6 +103,22 @@ export function EnterpriseWarehouseMovementsManager() {
   const [movementsPage, setMovementsPage] = useState(1);
   const [productSearchQuery, setProductSearchQuery] = useState("");
   const [showProductDropdown, setShowProductDropdown] = useState(false);
+  const [pageSettings, setPageSettings] = useState<GeneralPageRule | null>(null);
+
+  useEffect(() => {
+    const applySettings = () => {
+      setPageSettings(readGeneralPageSettings("warehouse-movements"));
+    };
+
+    applySettings();
+    window.addEventListener("storage", applySettings);
+    window.addEventListener(GENERAL_SETTINGS_UPDATED_EVENT, applySettings);
+
+    return () => {
+      window.removeEventListener("storage", applySettings);
+      window.removeEventListener(GENERAL_SETTINGS_UPDATED_EVENT, applySettings);
+    };
+  }, []);
 
   // Load warehouses from localStorage
   useEffect(() => {
@@ -245,6 +269,21 @@ export function EnterpriseWarehouseMovementsManager() {
       return;
     }
 
+    if (isFieldRequired(pageSettings, "productId") && !transferFormState.productId) {
+      toast.error("الرجاء تحديد المنتج");
+      return;
+    }
+
+    if (isFieldRequired(pageSettings, "fromWarehouseId") && !transferFormState.fromWarehouseId) {
+      toast.error("الرجاء تحديد مخزن المصدر");
+      return;
+    }
+
+    if (isFieldRequired(pageSettings, "toWarehouseId") && !transferFormState.toWarehouseId) {
+      toast.error("الرجاء تحديد مخزن القصد");
+      return;
+    }
+
     if (!transferFormState.productId || !transferFormState.fromWarehouseId || !transferFormState.toWarehouseId) {
       toast.error("الرجاء تحديد المنتج والمخازن");
       return;
@@ -359,20 +398,32 @@ export function EnterpriseWarehouseMovementsManager() {
 
   // Warehouse inventory columns
   const inventoryColumns = useMemo<Column<WarehouseInventoryRow>[]>(
-    () => [
-      { header: "اسم المخزن", accessor: "warehouseName" },
-      { header: "عدد المنتجات", accessor: "productsCount" },
-      { header: "إجمالي الكمية", accessor: "totalQuantity" },
-    ],
-    []
+    () => {
+      const baseColumns: Array<Column<WarehouseInventoryRow> & { keyName: string }> = [
+      { keyName: "warehouseName", header: getColumnLabel(pageSettings, "warehouseName", "اسم المخزن"), accessor: "warehouseName" },
+      { keyName: "productsCount", header: getColumnLabel(pageSettings, "productsCount", "عدد المنتجات"), accessor: "productsCount" },
+      { keyName: "totalQuantity", header: getColumnLabel(pageSettings, "totalQuantity", "إجمالي الكمية"), accessor: "totalQuantity" },
+    ];
+
+      if (!pageSettings) {
+        return baseColumns.map(({ keyName: _keyName, ...column }) => column);
+      }
+
+      return baseColumns
+        .filter((column) => isColumnVisible(pageSettings, column.keyName))
+        .map(({ keyName: _keyName, ...column }) => column);
+    },
+    [pageSettings]
   );
 
   // Movements history columns
   const movementsColumns = useMemo<Column<WarehouseMovement>[]>(
-    () => [
-      { header: "المنتج", accessor: "productName" },
+    () => {
+      const baseColumns: Array<Column<WarehouseMovement> & { keyName: string }> = [
+      { keyName: "productName", header: getColumnLabel(pageSettings, "productName", "المنتج"), accessor: "productName" },
       {
-        header: "من المخزن",
+        keyName: "fromWarehouseName",
+        header: getColumnLabel(pageSettings, "fromWarehouseName", "من المخزن"),
         accessor: (row) => (
           <div className="flex items-center gap-2">
             <span>{row.fromWarehouseName}</span>
@@ -380,7 +431,8 @@ export function EnterpriseWarehouseMovementsManager() {
         ),
       },
       {
-        header: "إلى المخزن",
+        keyName: "toWarehouseName",
+        header: getColumnLabel(pageSettings, "toWarehouseName", "إلى المخزن"),
         accessor: (row) => (
           <div className="flex items-center gap-2">
             <ArrowRight className="h-4 w-4 text-slate-400" />
@@ -388,12 +440,14 @@ export function EnterpriseWarehouseMovementsManager() {
           </div>
         ),
       },
-      { header: "الكمية", accessor: "quantity" },
+      { keyName: "quantity", header: getColumnLabel(pageSettings, "quantity", "الكمية"), accessor: "quantity" },
       {
-        header: "التاريخ",
+        keyName: "createdAt",
+        header: getColumnLabel(pageSettings, "createdAt", "التاريخ"),
         accessor: (row) => new Date(row.createdAt).toLocaleDateString("ar-SA"),
       },
       {
+        keyName: "actions",
         header: "الإجراءات",
         accessor: (row) => (
           canDelete ? (
@@ -407,8 +461,17 @@ export function EnterpriseWarehouseMovementsManager() {
           ) : null
         ),
       },
-    ],
-    [canDelete]
+    ];
+
+      if (!pageSettings) {
+        return baseColumns.map(({ keyName: _keyName, ...column }) => column);
+      }
+
+      return baseColumns
+        .filter((column) => column.keyName === "actions" || isColumnVisible(pageSettings, column.keyName))
+        .map(({ keyName: _keyName, ...column }) => column);
+    },
+    [canDelete, pageSettings]
   );
 
   return (
