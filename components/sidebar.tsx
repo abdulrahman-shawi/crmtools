@@ -106,6 +106,7 @@ export const Sidebar = ({ isCollapsed, setIsCollapsed }: { isCollapsed: boolean;
 
   const crmEnterpriseItems: MenuItem[] = [
     { icon: LayoutGrid, label: "نظرة عامة CRM", href: "/dashboard/crm-enterprise" },
+    { icon: Activity, label: "التحليلات", href: "/dashboard/crm-enterprise/analytics" },
     { icon: Building2, label: "إضافة العملاء", href: "/dashboard/crm-enterprise/customers", slug: "customers" },
     { icon: Boxes, label: "المنتجات و التصنيفات", href: "/dashboard/crm-enterprise/products", slug: "products" },
     { icon: ClipboardList, label: "الطلبات", href: "/dashboard/crm-enterprise/orders", slug: "orders" },

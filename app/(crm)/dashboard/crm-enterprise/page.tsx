@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Building2, Boxes, ClipboardList, PackageSearch, Settings2 } from "lucide-react";
+import { Activity, Building2, Boxes, ClipboardList, PackageSearch, Settings2 } from "lucide-react";
 import DynamicCard from "@/components/ui/dynamicCard";
 import { SectionHeader } from "@/components/ui/section-header";
 import { crmEnterpriseModules, crmEnterpriseNavigation } from "@/lib/data/mock-crm-enterprise";
@@ -12,6 +12,7 @@ const iconBySlug: Record<string, React.ReactNode> = {
   customers: <Building2 className="h-5 w-5" />,
   products: <Boxes className="h-5 w-5" />,
   orders: <ClipboardList className="h-5 w-5" />,
+  analytics: <Activity className="h-5 w-5" />,
   settings: <Settings2 className="h-5 w-5" />,
 };
 
@@ -140,6 +141,18 @@ export default function CrmEnterprisePage() {
                 <p className="font-semibold text-slate-900">الإعدادات العامة</p>
               </div>
               <p className="text-sm text-slate-600">تخصيص أقسام الموقع، الصفحات المعروضة، الحقول المطلوبة، ومعلومات الجداول.</p>
+            </DynamicCard.Content>
+          </DynamicCard>
+        </Link>
+
+        <Link href="/dashboard/crm-enterprise/analytics">
+          <DynamicCard className="h-full border border-slate-200 transition hover:-translate-y-0.5 hover:shadow-md">
+            <DynamicCard.Content className="space-y-3">
+              <div className="flex items-center gap-2 text-blue-700">
+                {iconBySlug.analytics}
+                <p className="font-semibold text-slate-900">التحليلات</p>
+              </div>
+              <p className="text-sm text-slate-600">لوحة تحليلات شاملة للمبيعات والعملاء والطلبات والمصاريف والتشغيل.</p>
             </DynamicCard.Content>
           </DynamicCard>
         </Link>
