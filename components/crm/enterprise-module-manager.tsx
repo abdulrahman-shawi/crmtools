@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import toast from "react-hot-toast";
 import { useAuth } from "@/context/AuthContext";
@@ -14,6 +14,29 @@ import type { CrmModuleDefinition, CrmModuleField, CrmModuleRow } from "@/lib/ty
 
 interface EnterpriseModuleManagerProps {
   module: CrmModuleDefinition;
+}
+
+const MODULE_STORAGE_KEY_PREFIX = "crm-enterprise-module-rows";
+
+/**
+ * Returns browser storage key for module rows.
+ */
+function getModuleStorageKey(slug: string): string {
+  return `${MODULE_STORAGE_KEY_PREFIX}:${slug}`;
+}
+
+/**
+ * Calculates tasks completion percentage with safe defaults.
+ */
+function getTaskProgressPercent(row: CrmModuleRow): number {
+  const target = Number(row.targetCount ?? 0);
+  const completed = Number(row.completedCount ?? 0);
+
+  if (target <= 0) {
+    return 0;
+  }
+
+  return Math.max(0, Math.min(100, Math.round((completed / target) * 100)));
 }
 
 /**
@@ -49,10 +72,44 @@ export function EnterpriseModuleManager({ module }: EnterpriseModuleManagerProps
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formState, setFormState] = useState<Record<string, string>>(() => buildInitialForm(module.fields));
 
+  const storageKey = useMemo(() => getModuleStorageKey(module.slug), [module.slug]);
+
   const { user } = useAuth();
   const canCreate = can(user, RBAC_PERMISSIONS.tasksCreate);
   const canEdit   = can(user, RBAC_PERMISSIONS.tasksEdit);
   const canDelete = can(user, RBAC_PERMISSIONS.tasksDelete);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    try {
+      const raw = window.localStorage.getItem(storageKey);
+      if (!raw) {
+        setRows(module.initialRows);
+        return;
+      }
+
+      const parsed = JSON.parse(raw) as CrmModuleRow[];
+      if (!Array.isArray(parsed)) {
+        setRows(module.initialRows);
+        return;
+      }
+
+      setRows(parsed);
+    } catch {
+      setRows(module.initialRows);
+    }
+  }, [storageKey, module.initialRows]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    window.localStorage.setItem(storageKey, JSON.stringify(rows));
+  }, [rows, storageKey]);
 
   const numericFieldKey = useMemo(() => {
     const preferred = ["amount", "total", "value", "annualValue", "price"];
@@ -82,7 +139,21 @@ export function EnterpriseModuleManager({ module }: EnterpriseModuleManagerProps
     () => [
       ...module.columns.map((column) => ({
         header: column.label,
-        accessor: (row: CrmModuleRow) => String(row[column.key] ?? "-"),
+        accessor: (row: CrmModuleRow) => {
+          if (module.slug === "tasks" && column.key === "progress") {
+            const progress = getTaskProgressPercent(row);
+            return (
+              <div className="flex min-w-[120px] items-center gap-2">
+                <div className="h-2 w-20 overflow-hidden rounded-full bg-slate-200">
+                  <div className="h-full bg-blue-600 transition-all" style={{ width: `${progress}%` }} />
+                </div>
+                <span className="text-xs font-semibold text-slate-700">{progress}%</span>
+              </div>
+            );
+          }
+
+          return String(row[column.key] ?? "-");
+        },
       })),
       {
         header: "الإجراءات",
@@ -165,15 +236,25 @@ export function EnterpriseModuleManager({ module }: EnterpriseModuleManagerProps
       })
     );
 
+    const normalizedWithComputed = { ...normalizedValues };
+    if (module.slug === "tasks") {
+      const taskProgress = getTaskProgressPercent(normalizedValues as CrmModuleRow);
+      normalizedWithComputed.progress = taskProgress;
+
+      if (!String(normalizedWithComputed.status ?? "").trim()) {
+        normalizedWithComputed.status = taskProgress >= 100 ? "done" : taskProgress > 0 ? "doing" : "todo";
+      }
+    }
+
     if (editingId) {
       setRows((prev) =>
-        prev.map((row) => (row.id === editingId ? { ...row, ...normalizedValues } : row))
+        prev.map((row) => (row.id === editingId ? { ...row, ...normalizedWithComputed } : row))
       );
       toast.success("تم حفظ التعديل");
     } else {
       const newRow: CrmModuleRow = {
         id: `${module.slug}_${Date.now()}`,
-        ...normalizedValues,
+        ...normalizedWithComputed,
       };
       setRows((prev) => [newRow, ...prev]);
       toast.success("تمت الإضافة بنجاح");
