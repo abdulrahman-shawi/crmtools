@@ -4,255 +4,578 @@ import { useEffect, useMemo, useState } from "react";
 import DynamicCard from "@/components/ui/dynamicCard";
 import { SectionHeader } from "@/components/ui/section-header";
 import { crmEnterpriseModules } from "@/lib/data/mock-crm-enterprise";
-import type { CrmModuleRow } from "@/lib/types/crm-enterprise";
 
-const MODULE_STORAGE_KEY_PREFIX = "crm-enterprise-module-rows";
+type DateRange = {
+  from: string;
+  to: string;
+};
 
-type AnalyticsRows = Record<string, CrmModuleRow[]>;
+type SalesOrderRow = {
+  id: string;
+  date?: string;
+  customerName?: string;
+  receiverCity?: string;
+  status?: string;
+  total?: number;
+};
+
+type SalesInvoiceItemRow = {
+  id: string;
+  name?: string;
+  quantity?: number;
+};
+
+type SalesInvoiceRow = {
+  id: string;
+  date?: string;
+  status?: string;
+  amount?: number;
+  items?: SalesInvoiceItemRow[];
+};
+
+type ProductCatalogRow = {
+  id: string;
+  type?: string;
+  createdAt?: string;
+  productName?: string;
+  quantity?: number;
+  price?: number;
+};
+
+type ExpenseRow = {
+  id: string;
+  date?: string;
+  totalAmount?: number;
+};
+
+type CashMovementRow = {
+  id: string;
+  date?: string;
+  amount?: number;
+  type?: string;
+};
+
+type ReturnRow = {
+  id: string;
+  createdAt?: string;
+  amount?: number;
+};
+
+type TaskRow = {
+  id: string;
+  dueDate?: string;
+  assignee?: string;
+  taskType?: string;
+  entityType?: string;
+  targetCount?: number;
+  completedCount?: number;
+};
+
+const STORAGE_KEYS = {
+  orders: "crm-enterprise-sales-orders",
+  invoices: "crm-enterprise-sales-invoices",
+  products: "crm-enterprise-products-catalog",
+  expenses: "crm-enterprise-expenses",
+  cashMovements: "crm-enterprise-cash-movements",
+  returns: "crm-enterprise-returns",
+  tasks: "crm-enterprise-module-rows:tasks",
+};
 
 /**
- * Returns module rows from localStorage with fallback to mock rows.
+ * Reads an array from localStorage with a typed fallback.
  */
-function getModuleRows(slug: string): CrmModuleRow[] {
+function readStorageArray<T>(key: string, fallback: T[]): T[] {
   if (typeof window === "undefined") {
-    return (crmEnterpriseModules[slug as keyof typeof crmEnterpriseModules]?.initialRows ?? []) as CrmModuleRow[];
+    return fallback;
   }
 
-  const storageKey = `${MODULE_STORAGE_KEY_PREFIX}:${slug}`;
-  const fallback = (crmEnterpriseModules[slug as keyof typeof crmEnterpriseModules]?.initialRows ?? []) as CrmModuleRow[];
-
   try {
-    const raw = window.localStorage.getItem(storageKey);
+    const raw = window.localStorage.getItem(key);
     if (!raw) {
       return fallback;
     }
 
-    const parsed = JSON.parse(raw) as CrmModuleRow[];
-    if (!Array.isArray(parsed)) {
-      return fallback;
-    }
-
-    return parsed;
+    const parsed = JSON.parse(raw) as T[];
+    return Array.isArray(parsed) ? parsed : fallback;
   } catch {
     return fallback;
   }
 }
 
 /**
- * Normalizes a numeric value from any row field.
+ * Converts unknown value to a safe number.
  */
-function asNumber(value: unknown): number {
-  const num = Number(value ?? 0);
-  return Number.isFinite(num) ? num : 0;
+function toNumber(value: unknown): number {
+  const parsed = Number(value ?? 0);
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 /**
- * CRM enterprise analytics overview page.
+ * Returns true when the date is within the selected range.
+ */
+function isInRange(dateValue: string | undefined, range: DateRange): boolean {
+  if (!dateValue) {
+    return true;
+  }
+
+  if (range.from && dateValue < range.from) {
+    return false;
+  }
+
+  if (range.to && dateValue > range.to) {
+    return false;
+  }
+
+  return true;
+}
+
+/**
+ * Returns country name based on city fallback mapping.
+ */
+function inferCountryByCity(city: string): string {
+  const normalized = city.trim().toLowerCase();
+  const map: Record<string, string> = {
+    "الرياض": "السعودية",
+    "جدة": "السعودية",
+    "الدمام": "السعودية",
+    "مكة": "السعودية",
+    "المدينة": "السعودية",
+    "دبي": "الإمارات",
+    "أبوظبي": "الإمارات",
+    "الشارقة": "الإمارات",
+    "الدوحة": "قطر",
+    "الكويت": "الكويت",
+    "المنامة": "البحرين",
+    "مسقط": "عمان",
+    "القاهرة": "مصر",
+    "عمان": "الأردن",
+  };
+
+  for (const [key, country] of Object.entries(map)) {
+    if (normalized.includes(key.toLowerCase())) {
+      return country;
+    }
+  }
+
+  return "غير محدد";
+}
+
+/**
+ * Builds top list by numeric values.
+ */
+function topEntries(input: Record<string, number>, limit = 7): Array<{ name: string; value: number }> {
+  return Object.entries(input)
+    .map(([name, value]) => ({ name, value }))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, limit);
+}
+
+/**
+ * Date range control used in analytics sections.
+ */
+function DateRangeControl({ value, onChange, idPrefix }: { value: DateRange; onChange: (next: DateRange) => void; idPrefix: string }) {
+  return (
+    <div className="grid grid-cols-2 gap-2">
+      <input
+        id={`${idPrefix}-from`}
+        type="date"
+        className="h-9 rounded-lg border border-slate-200 px-2 text-xs"
+        value={value.from}
+        onChange={(event) => onChange({ ...value, from: event.target.value })}
+      />
+      <input
+        id={`${idPrefix}-to`}
+        type="date"
+        className="h-9 rounded-lg border border-slate-200 px-2 text-xs"
+        value={value.to}
+        onChange={(event) => onChange({ ...value, to: event.target.value })}
+      />
+    </div>
+  );
+}
+
+/**
+ * CRM analytics page with multi-domain insights and section-level time filters.
  */
 export default function CrmEnterpriseAnalyticsPage() {
-  const [rowsByModule, setRowsByModule] = useState<AnalyticsRows>({});
+  const [orders, setOrders] = useState<SalesOrderRow[]>([]);
+  const [invoices, setInvoices] = useState<SalesInvoiceRow[]>([]);
+  const [products, setProducts] = useState<ProductCatalogRow[]>([]);
+  const [expenses, setExpenses] = useState<ExpenseRow[]>([]);
+  const [cashMovements, setCashMovements] = useState<CashMovementRow[]>([]);
+  const [returnsRows, setReturnsRows] = useState<ReturnRow[]>([]);
+  const [tasks, setTasks] = useState<TaskRow[]>([]);
+
+  const [salesRange, setSalesRange] = useState<DateRange>({ from: "", to: "" });
+  const [ordersRange, setOrdersRange] = useState<DateRange>({ from: "", to: "" });
+  const [productsRange, setProductsRange] = useState<DateRange>({ from: "", to: "" });
+  const [employeesRange, setEmployeesRange] = useState<DateRange>({ from: "", to: "" });
+  const [financeRange, setFinanceRange] = useState<DateRange>({ from: "", to: "" });
 
   useEffect(() => {
-    const slugs = [
-      "customers",
-      "orders",
-      "products",
-      "expenses",
-      "cash-movements",
-      "returns",
-      "tasks",
-      "invoices",
-      "warehouses",
-      "shipping-companies",
-    ];
+    setOrders(
+      readStorageArray<SalesOrderRow>(
+        STORAGE_KEYS.orders,
+        (crmEnterpriseModules.orders?.initialRows ?? []) as SalesOrderRow[]
+      )
+    );
 
-    const next: AnalyticsRows = {};
-    slugs.forEach((slug) => {
-      next[slug] = getModuleRows(slug);
-    });
+    setInvoices(
+      readStorageArray<SalesInvoiceRow>(
+        STORAGE_KEYS.invoices,
+        (crmEnterpriseModules.invoices?.initialRows ?? []) as SalesInvoiceRow[]
+      )
+    );
 
-    setRowsByModule(next);
+    setProducts(
+      readStorageArray<ProductCatalogRow>(
+        STORAGE_KEYS.products,
+        (crmEnterpriseModules.products?.initialRows ?? []) as ProductCatalogRow[]
+      )
+    );
+
+    setExpenses(readStorageArray<ExpenseRow>(STORAGE_KEYS.expenses, []));
+    setCashMovements(readStorageArray<CashMovementRow>(STORAGE_KEYS.cashMovements, []));
+    setReturnsRows(readStorageArray<ReturnRow>(STORAGE_KEYS.returns, []));
+
+    setTasks(
+      readStorageArray<TaskRow>(
+        STORAGE_KEYS.tasks,
+        (crmEnterpriseModules.tasks?.initialRows ?? []) as TaskRow[]
+      )
+    );
   }, []);
 
-  const analytics = useMemo(() => {
-    const customers = rowsByModule.customers ?? [];
-    const orders = rowsByModule.orders ?? [];
-    const products = rowsByModule.products ?? [];
-    const expenses = rowsByModule.expenses ?? [];
-    const cash = rowsByModule["cash-movements"] ?? [];
-    const returns = rowsByModule.returns ?? [];
-    const tasks = rowsByModule.tasks ?? [];
-    const invoices = rowsByModule.invoices ?? [];
-    const warehouses = rowsByModule.warehouses ?? [];
-    const shipping = rowsByModule["shipping-companies"] ?? [];
+  const salesAnalytics = useMemo(() => {
+    const filteredOrders = orders.filter((row) => isInRange(row.date, salesRange));
+    const filteredInvoices = invoices.filter((row) => isInRange(row.date, salesRange));
 
-    const activeCustomers = customers.filter((row) => String(row.status ?? "") === "active").length;
-    const totalOrdersValue = orders.reduce((sum, row) => sum + asNumber(row.total), 0);
-    const deliveredOrders = orders.filter((row) => String(row.status ?? "") === "delivered").length;
-    const totalExpenses = expenses.reduce((sum, row) => sum + asNumber(row.amount), 0);
+    const ordersValue = filteredOrders.reduce((sum, row) => sum + toNumber(row.total), 0);
+    const paidInvoices = filteredInvoices.filter((row) => String(row.status ?? "") === "paid");
+    const paidInvoicesValue = paidInvoices.reduce((sum, row) => sum + toNumber(row.amount), 0);
 
-    const cashIn = cash
-      .filter((row) => String(row.type ?? "") === "in")
-      .reduce((sum, row) => sum + asNumber(row.amount), 0);
-    const cashOut = cash
-      .filter((row) => String(row.type ?? "") === "out")
-      .reduce((sum, row) => sum + asNumber(row.amount), 0);
+    const totalInvoiceItems = filteredInvoices.flatMap((invoice) => (Array.isArray(invoice.items) ? invoice.items : []));
 
-    const totalInvoices = invoices.reduce((sum, row) => sum + asNumber(row.amount), 0);
-    const paidInvoices = invoices
-      .filter((row) => String(row.status ?? "") === "paid")
-      .reduce((sum, row) => sum + asNumber(row.amount), 0);
-
-    const totalReturnsValue = returns.reduce((sum, row) => sum + asNumber(row.amount), 0);
-
-    const totalTarget = tasks.reduce((sum, row) => sum + asNumber(row.targetCount), 0);
-    const totalCompleted = tasks.reduce((sum, row) => sum + asNumber(row.completedCount), 0);
-    const tasksProgress = totalTarget > 0 ? Math.round((totalCompleted / totalTarget) * 100) : 0;
-
-    const avgProductPrice = products.length > 0
-      ? Math.round(products.reduce((sum, row) => sum + asNumber(row.price), 0) / products.length)
-      : 0;
-
-    const avgWarehouseUtilization = warehouses.length > 0
-      ? Math.round(warehouses.reduce((sum, row) => sum + asNumber(row.utilization), 0) / warehouses.length)
-      : 0;
-
-    const avgShippingCost = shipping.length > 0
-      ? Math.round(shipping.reduce((sum, row) => sum + asNumber(row.avgCost), 0) / shipping.length)
-      : 0;
-
-    const netOperational = totalOrdersValue + paidInvoices + cashIn - (totalExpenses + cashOut + totalReturnsValue);
+    const productQtyMap: Record<string, number> = {};
+    totalInvoiceItems.forEach((item) => {
+      const productName = String(item.name ?? "منتج غير معروف");
+      productQtyMap[productName] = (productQtyMap[productName] ?? 0) + toNumber(item.quantity);
+    });
 
     return {
-      totalCustomers: customers.length,
-      activeCustomers,
-      totalOrders: orders.length,
-      deliveredOrders,
-      totalOrdersValue,
+      ordersCount: filteredOrders.length,
+      ordersValue,
+      paidInvoicesValue,
+      totalInvoiceItemsCount: totalInvoiceItems.length,
+      topProductsSold: topEntries(productQtyMap, 8),
+    };
+  }, [orders, invoices, salesRange]);
+
+  const ordersAnalytics = useMemo(() => {
+    const filteredOrders = orders.filter((row) => isInRange(row.date, ordersRange));
+
+    const byStatus: Record<string, number> = {};
+    const byCity: Record<string, number> = {};
+    const byCountry: Record<string, number> = {};
+
+    filteredOrders.forEach((row) => {
+      const status = String(row.status ?? "غير محدد");
+      const city = String(row.receiverCity ?? "غير محدد");
+      const country = inferCountryByCity(city);
+
+      byStatus[status] = (byStatus[status] ?? 0) + 1;
+      byCity[city] = (byCity[city] ?? 0) + 1;
+      byCountry[country] = (byCountry[country] ?? 0) + 1;
+    });
+
+    return {
+      totalOrders: filteredOrders.length,
+      byStatus: topEntries(byStatus, 10),
+      byCity: topEntries(byCity, 10),
+      byCountry: topEntries(byCountry, 10),
+    };
+  }, [orders, ordersRange]);
+
+  const productsAnalytics = useMemo(() => {
+    const filteredProducts = products.filter((row) => isInRange(row.createdAt, productsRange));
+    const productOnly = filteredProducts.filter((row) => String(row.type ?? "product") === "product");
+
+    const lowStock = productOnly
+      .map((row) => ({
+        name: String(row.productName ?? "منتج غير معروف"),
+        stock: toNumber(row.quantity),
+        price: toNumber(row.price),
+      }))
+      .filter((row) => row.stock <= 10)
+      .sort((a, b) => a.stock - b.stock)
+      .slice(0, 12);
+
+    const avgPrice = productOnly.length > 0
+      ? Math.round(productOnly.reduce((sum, row) => sum + toNumber(row.price), 0) / productOnly.length)
+      : 0;
+
+    return {
+      totalProducts: productOnly.length,
+      avgPrice,
+      lowStock,
+    };
+  }, [products, productsRange]);
+
+  const employeesAnalytics = useMemo(() => {
+    const filteredTasks = tasks.filter((row) => isInRange(row.dueDate, employeesRange));
+
+    const salesByAssignee: Record<string, number> = {};
+    const customerAddsByAssignee: Record<string, number> = {};
+
+    filteredTasks.forEach((row) => {
+      const assignee = String(row.assignee ?? "غير محدد");
+      const entityType = String(row.entityType ?? "");
+      const completedCount = toNumber(row.completedCount);
+      const taskType = String(row.taskType ?? "");
+
+      if (entityType === "orders") {
+        salesByAssignee[assignee] = (salesByAssignee[assignee] ?? 0) + completedCount;
+      }
+
+      if (entityType === "customers" && taskType === "addition") {
+        customerAddsByAssignee[assignee] = (customerAddsByAssignee[assignee] ?? 0) + completedCount;
+      }
+    });
+
+    const totalTarget = filteredTasks.reduce((sum, row) => sum + toNumber(row.targetCount), 0);
+    const totalCompleted = filteredTasks.reduce((sum, row) => sum + toNumber(row.completedCount), 0);
+    const progress = totalTarget > 0 ? Math.round((totalCompleted / totalTarget) * 100) : 0;
+
+    return {
+      totalTasks: filteredTasks.length,
+      totalTarget,
+      totalCompleted,
+      progress,
+      topSellers: topEntries(salesByAssignee, 8),
+      topCustomerAdders: topEntries(customerAddsByAssignee, 8),
+    };
+  }, [tasks, employeesRange]);
+
+  const financeAnalytics = useMemo(() => {
+    const filteredExpenses = expenses.filter((row) => isInRange(row.date, financeRange));
+    const filteredCash = cashMovements.filter((row) => isInRange(row.date, financeRange));
+    const filteredReturns = returnsRows.filter((row) => isInRange(row.createdAt, financeRange));
+    const filteredInvoices = invoices.filter((row) => isInRange(row.date, financeRange));
+
+    const totalExpenses = filteredExpenses.reduce((sum, row) => sum + toNumber(row.totalAmount), 0);
+    const cashIn = filteredCash
+      .filter((row) => String(row.type ?? "") === "in")
+      .reduce((sum, row) => sum + toNumber(row.amount), 0);
+    const cashOut = filteredCash
+      .filter((row) => String(row.type ?? "") === "out")
+      .reduce((sum, row) => sum + toNumber(row.amount), 0);
+    const totalReturns = filteredReturns.reduce((sum, row) => sum + toNumber(row.amount), 0);
+
+    const totalInvoices = filteredInvoices.reduce((sum, row) => sum + toNumber(row.amount), 0);
+    const paidInvoices = filteredInvoices
+      .filter((row) => String(row.status ?? "") === "paid")
+      .reduce((sum, row) => sum + toNumber(row.amount), 0);
+
+    const netFlow = cashIn + paidInvoices - (cashOut + totalExpenses + totalReturns);
+
+    return {
       totalExpenses,
       cashIn,
       cashOut,
+      totalReturns,
       totalInvoices,
       paidInvoices,
-      totalReturnsValue,
-      totalProducts: products.length,
-      avgProductPrice,
-      tasksProgress,
-      totalTarget,
-      totalCompleted,
-      avgWarehouseUtilization,
-      avgShippingCost,
-      netOperational,
+      netFlow,
+      collectionRate: totalInvoices > 0 ? Math.round((paidInvoices / totalInvoices) * 100) : 0,
     };
-  }, [rowsByModule]);
+  }, [expenses, cashMovements, returnsRows, invoices, financeRange]);
 
-  const moduleStats = useMemo(
-    () => [
-      { label: "العملاء", count: rowsByModule.customers?.length ?? 0 },
-      { label: "الطلبات", count: rowsByModule.orders?.length ?? 0 },
-      { label: "المنتجات", count: rowsByModule.products?.length ?? 0 },
-      { label: "المصاريف", count: rowsByModule.expenses?.length ?? 0 },
-      { label: "المرتجعات", count: rowsByModule.returns?.length ?? 0 },
-      { label: "المهام", count: rowsByModule.tasks?.length ?? 0 },
-      { label: "الفواتير", count: rowsByModule.invoices?.length ?? 0 },
-      { label: "المخازن", count: rowsByModule.warehouses?.length ?? 0 },
-      { label: "شركات الشحن", count: rowsByModule["shipping-companies"]?.length ?? 0 },
-    ],
-    [rowsByModule]
-  );
+  const totalOverviewCount =
+    orders.length + invoices.length + products.length + expenses.length + cashMovements.length + returnsRows.length + tasks.length;
 
   return (
     <section className="space-y-6" dir="rtl">
       <SectionHeader
         align="right"
-        title="تحليلات CRM"
-        description="لوحة تحليلات شاملة للمبيعات والعملاء والتشغيل مبنية على البيانات الفعلية للموديولات."
+        title="تحليلات CRM المتقدمة"
+        description="تحليلات تفصيلية شاملة مع فلاتر زمنية مستقلة لكل قسم لقراءة أداء المبيعات والطلبات والمنتجات والموظفين والمالية."
       />
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <DynamicCard className="border-l-4 border-l-blue-600">
-          <DynamicCard.Content className="py-4">
-            <p className="text-sm text-slate-500">إجمالي العملاء</p>
-            <p className="text-3xl font-bold text-slate-900">{analytics.totalCustomers}</p>
-            <p className="text-xs text-slate-500">نشط: {analytics.activeCustomers}</p>
-          </DynamicCard.Content>
-        </DynamicCard>
-
-        <DynamicCard className="border-l-4 border-l-emerald-600">
-          <DynamicCard.Content className="py-4">
-            <p className="text-sm text-slate-500">قيمة الطلبات</p>
-            <p className="text-3xl font-bold text-emerald-700">{analytics.totalOrdersValue.toLocaleString()}</p>
-            <p className="text-xs text-slate-500">طلبات مُسلّمة: {analytics.deliveredOrders}/{analytics.totalOrders}</p>
-          </DynamicCard.Content>
-        </DynamicCard>
-
-        <DynamicCard className="border-l-4 border-l-red-500">
-          <DynamicCard.Content className="py-4">
-            <p className="text-sm text-slate-500">إجمالي المصاريف</p>
-            <p className="text-3xl font-bold text-red-600">{analytics.totalExpenses.toLocaleString()}</p>
-            <p className="text-xs text-slate-500">مرتجعات: {analytics.totalReturnsValue.toLocaleString()}</p>
-          </DynamicCard.Content>
-        </DynamicCard>
-
-        <DynamicCard className="border-l-4 border-l-violet-600">
-          <DynamicCard.Content className="py-4">
-            <p className="text-sm text-slate-500">صافي تشغيلي</p>
-            <p className="text-3xl font-bold text-violet-700">{analytics.netOperational.toLocaleString()}</p>
-            <p className="text-xs text-slate-500">تدفق نقدي وارد/صادر: {analytics.cashIn.toLocaleString()} / {analytics.cashOut.toLocaleString()}</p>
-          </DynamicCard.Content>
-        </DynamicCard>
+      <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-6">
+        <DynamicCard><DynamicCard.Content className="py-3"><p className="text-xs text-slate-500">إجمالي الطلبات</p><p className="text-2xl font-bold">{orders.length}</p></DynamicCard.Content></DynamicCard>
+        <DynamicCard><DynamicCard.Content className="py-3"><p className="text-xs text-slate-500">إجمالي الفواتير</p><p className="text-2xl font-bold">{invoices.length}</p></DynamicCard.Content></DynamicCard>
+        <DynamicCard><DynamicCard.Content className="py-3"><p className="text-xs text-slate-500">المنتجات</p><p className="text-2xl font-bold">{products.length}</p></DynamicCard.Content></DynamicCard>
+        <DynamicCard><DynamicCard.Content className="py-3"><p className="text-xs text-slate-500">المهام</p><p className="text-2xl font-bold">{tasks.length}</p></DynamicCard.Content></DynamicCard>
+        <DynamicCard><DynamicCard.Content className="py-3"><p className="text-xs text-slate-500">المصاريف</p><p className="text-2xl font-bold">{expenses.length}</p></DynamicCard.Content></DynamicCard>
+        <DynamicCard><DynamicCard.Content className="py-3"><p className="text-xs text-slate-500">إجمالي السجلات</p><p className="text-2xl font-bold">{totalOverviewCount}</p></DynamicCard.Content></DynamicCard>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <DynamicCard>
-          <DynamicCard.Header title="تقدم مهام الفريق" description="نسبة الإنجاز مقابل العدد المستهدف للمهام." />
-          <DynamicCard.Content className="space-y-3 pt-4">
-            <div className="h-3 overflow-hidden rounded-full bg-slate-200">
-              <div className="h-full bg-blue-600 transition-all" style={{ width: `${analytics.tasksProgress}%` }} />
+      <DynamicCard>
+        <DynamicCard.Header title="المبيعات والمنتجات الأكثر مبيعًا" description="يتضمن الموظفين الأعلى مبيعًا والمنتجات الأكثر بيعًا من بنود الفواتير." />
+        <DynamicCard.Content className="space-y-4 pt-4">
+          <DateRangeControl value={salesRange} onChange={setSalesRange} idPrefix="sales" />
+
+          <div className="grid gap-3 md:grid-cols-4">
+            <div className="rounded-lg border border-slate-200 p-3"><p className="text-xs text-slate-500">عدد الطلبات</p><p className="text-xl font-bold">{salesAnalytics.ordersCount}</p></div>
+            <div className="rounded-lg border border-slate-200 p-3"><p className="text-xs text-slate-500">قيمة الطلبات</p><p className="text-xl font-bold">{salesAnalytics.ordersValue.toLocaleString()}</p></div>
+            <div className="rounded-lg border border-slate-200 p-3"><p className="text-xs text-slate-500">الفواتير المدفوعة</p><p className="text-xl font-bold">{salesAnalytics.paidInvoicesValue.toLocaleString()}</p></div>
+            <div className="rounded-lg border border-slate-200 p-3"><p className="text-xs text-slate-500">بنود البيع</p><p className="text-xl font-bold">{salesAnalytics.totalInvoiceItemsCount}</p></div>
+          </div>
+
+          <div className="rounded-lg border border-slate-200 p-3">
+            <p className="mb-2 text-sm font-semibold text-slate-800">المنتجات الأكثر مبيعًا</p>
+            <div className="space-y-2">
+              {salesAnalytics.topProductsSold.length === 0 ? (
+                <p className="text-xs text-slate-500">لا توجد بيانات كافية ضمن الفترة المحددة.</p>
+              ) : (
+                salesAnalytics.topProductsSold.map((item) => (
+                  <div key={item.name} className="flex items-center justify-between rounded-md bg-slate-50 px-3 py-2 text-sm">
+                    <span>{item.name}</span>
+                    <span className="font-bold text-blue-700">{item.value}</span>
+                  </div>
+                ))
+              )}
             </div>
-            <div className="flex items-center justify-between text-sm text-slate-600">
-              <span>المنجز: {analytics.totalCompleted}</span>
-              <span>المطلوب: {analytics.totalTarget}</span>
-              <span className="font-semibold text-blue-700">{analytics.tasksProgress}%</span>
+          </div>
+        </DynamicCard.Content>
+      </DynamicCard>
+
+      <div className="grid gap-4 lg:grid-cols-3">
+        <DynamicCard className="lg:col-span-2">
+          <DynamicCard.Header title="تحليلات الطلبات" description="توزيع الطلبات حسب البلد والمدينة والحالة." />
+          <DynamicCard.Content className="space-y-4 pt-4">
+            <DateRangeControl value={ordersRange} onChange={setOrdersRange} idPrefix="orders" />
+            <div className="rounded-lg border border-slate-200 p-3">
+              <p className="mb-2 text-sm font-semibold">الطلبات حسب الحالة</p>
+              <div className="space-y-2">
+                {ordersAnalytics.byStatus.map((item) => (
+                  <div key={item.name} className="flex items-center justify-between rounded-md bg-slate-50 px-3 py-2 text-sm">
+                    <span>{item.name}</span>
+                    <span className="font-bold">{item.value}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="rounded-lg border border-slate-200 p-3">
+                <p className="mb-2 text-sm font-semibold">توزيع الطلبات حسب البلد</p>
+                <div className="space-y-2">
+                  {ordersAnalytics.byCountry.map((item) => (
+                    <div key={item.name} className="flex items-center justify-between rounded-md bg-slate-50 px-3 py-2 text-sm">
+                      <span>{item.name}</span>
+                      <span className="font-bold">{item.value}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="rounded-lg border border-slate-200 p-3">
+                <p className="mb-2 text-sm font-semibold">عدد الطلبات في كل مدينة</p>
+                <div className="space-y-2">
+                  {ordersAnalytics.byCity.map((item) => (
+                    <div key={item.name} className="flex items-center justify-between rounded-md bg-slate-50 px-3 py-2 text-sm">
+                      <span>{item.name}</span>
+                      <span className="font-bold">{item.value}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           </DynamicCard.Content>
         </DynamicCard>
 
         <DynamicCard>
-          <DynamicCard.Header title="كفاءة التشغيل" description="مؤشرات داعمة لإدارة التشغيل اليومية." />
-          <DynamicCard.Content className="grid grid-cols-2 gap-3 pt-4">
-            <div className="rounded-lg border border-slate-200 p-3">
-              <p className="text-xs text-slate-500">متوسط سعر المنتج</p>
-              <p className="text-xl font-bold text-slate-900">{analytics.avgProductPrice.toLocaleString()}</p>
-            </div>
-            <div className="rounded-lg border border-slate-200 p-3">
-              <p className="text-xs text-slate-500">متوسط استخدام المخازن</p>
-              <p className="text-xl font-bold text-slate-900">{analytics.avgWarehouseUtilization}%</p>
-            </div>
-            <div className="rounded-lg border border-slate-200 p-3">
-              <p className="text-xs text-slate-500">متوسط تكلفة الشحن</p>
-              <p className="text-xl font-bold text-slate-900">{analytics.avgShippingCost.toLocaleString()}</p>
-            </div>
-            <div className="rounded-lg border border-slate-200 p-3">
-              <p className="text-xs text-slate-500">تحصيل الفواتير</p>
-              <p className="text-xl font-bold text-slate-900">
-                {analytics.totalInvoices > 0 ? Math.round((analytics.paidInvoices / analytics.totalInvoices) * 100) : 0}%
-              </p>
-            </div>
+          <DynamicCard.Header title="ملخص الطلبات" description="إجمالي الطلبات في الفترة المحددة." />
+          <DynamicCard.Content className="pt-4">
+            <p className="text-xs text-slate-500">عدد الطلبات</p>
+            <p className="text-4xl font-bold text-blue-700">{ordersAnalytics.totalOrders}</p>
           </DynamicCard.Content>
         </DynamicCard>
       </div>
 
       <DynamicCard>
-        <DynamicCard.Header title="توزيع السجلات حسب الموديول" description="صورة سريعة لحجم البيانات في كل جزء من النظام." />
-        <DynamicCard.Content className="pt-4">
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {moduleStats.map((item) => (
-              <div key={item.label} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-                <p className="text-sm text-slate-600">{item.label}</p>
-                <p className="text-2xl font-bold text-slate-900">{item.count}</p>
+        <DynamicCard.Header title="تحليلات المنتجات والمخزون" description="المنتجات منخفضة المخزون ومتوسط الأسعار." />
+        <DynamicCard.Content className="space-y-4 pt-4">
+          <DateRangeControl value={productsRange} onChange={setProductsRange} idPrefix="products" />
+          <div className="grid gap-3 md:grid-cols-3">
+            <div className="rounded-lg border border-slate-200 p-3"><p className="text-xs text-slate-500">إجمالي المنتجات</p><p className="text-xl font-bold">{productsAnalytics.totalProducts}</p></div>
+            <div className="rounded-lg border border-slate-200 p-3"><p className="text-xs text-slate-500">متوسط السعر</p><p className="text-xl font-bold">{productsAnalytics.avgPrice.toLocaleString()}</p></div>
+            <div className="rounded-lg border border-slate-200 p-3"><p className="text-xs text-slate-500">منتجات منخفضة المخزون</p><p className="text-xl font-bold text-red-600">{productsAnalytics.lowStock.length}</p></div>
+          </div>
+
+          <div className="rounded-lg border border-slate-200 p-3">
+            <p className="mb-2 text-sm font-semibold">المنتجات منخفضة المخزون</p>
+            <div className="space-y-2">
+              {productsAnalytics.lowStock.length === 0 ? (
+                <p className="text-xs text-slate-500">لا توجد منتجات منخفضة المخزون ضمن الفلتر المحدد.</p>
+              ) : (
+                productsAnalytics.lowStock.map((item) => (
+                  <div key={item.name} className="flex items-center justify-between rounded-md bg-slate-50 px-3 py-2 text-sm">
+                    <span>{item.name}</span>
+                    <span className="font-bold text-red-600">المخزون: {item.stock}</span>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </DynamicCard.Content>
+      </DynamicCard>
+
+      <DynamicCard>
+        <DynamicCard.Header title="تحليلات أداء الموظفين والفرق" description="الموظفون/الفرق الأكثر مبيعًا والأكثر إضافة للعملاء حسب إنجاز المهام." />
+        <DynamicCard.Content className="space-y-4 pt-4">
+          <DateRangeControl value={employeesRange} onChange={setEmployeesRange} idPrefix="employees" />
+          <div className="grid gap-3 md:grid-cols-4">
+            <div className="rounded-lg border border-slate-200 p-3"><p className="text-xs text-slate-500">المهام</p><p className="text-xl font-bold">{employeesAnalytics.totalTasks}</p></div>
+            <div className="rounded-lg border border-slate-200 p-3"><p className="text-xs text-slate-500">المطلوب</p><p className="text-xl font-bold">{employeesAnalytics.totalTarget}</p></div>
+            <div className="rounded-lg border border-slate-200 p-3"><p className="text-xs text-slate-500">المنجز</p><p className="text-xl font-bold">{employeesAnalytics.totalCompleted}</p></div>
+            <div className="rounded-lg border border-slate-200 p-3"><p className="text-xs text-slate-500">نسبة الإنجاز</p><p className="text-xl font-bold text-blue-700">{employeesAnalytics.progress}%</p></div>
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            <div className="rounded-lg border border-slate-200 p-3">
+              <p className="mb-2 text-sm font-semibold">الموظفون/الفرق الأكثر مبيعًا</p>
+              <div className="space-y-2">
+                {employeesAnalytics.topSellers.length === 0 ? (
+                  <p className="text-xs text-slate-500">لا توجد مهام مبيعات كافية.</p>
+                ) : (
+                  employeesAnalytics.topSellers.map((item) => (
+                    <div key={item.name} className="flex items-center justify-between rounded-md bg-slate-50 px-3 py-2 text-sm">
+                      <span>{item.name}</span>
+                      <span className="font-bold text-emerald-700">{item.value}</span>
+                    </div>
+                  ))
+                )}
               </div>
-            ))}
+            </div>
+            <div className="rounded-lg border border-slate-200 p-3">
+              <p className="mb-2 text-sm font-semibold">الأكثر إضافة للعملاء</p>
+              <div className="space-y-2">
+                {employeesAnalytics.topCustomerAdders.length === 0 ? (
+                  <p className="text-xs text-slate-500">لا توجد مهام إضافة عملاء كافية.</p>
+                ) : (
+                  employeesAnalytics.topCustomerAdders.map((item) => (
+                    <div key={item.name} className="flex items-center justify-between rounded-md bg-slate-50 px-3 py-2 text-sm">
+                      <span>{item.name}</span>
+                      <span className="font-bold text-blue-700">{item.value}</span>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        </DynamicCard.Content>
+      </DynamicCard>
+
+      <DynamicCard>
+        <DynamicCard.Header title="التحليلات المالية" description="المصاريف، التدفقات النقدية، التحصيل، وصافي الحركة المالية." />
+        <DynamicCard.Content className="space-y-4 pt-4">
+          <DateRangeControl value={financeRange} onChange={setFinanceRange} idPrefix="finance" />
+          <div className="grid gap-3 md:grid-cols-3 lg:grid-cols-6">
+            <div className="rounded-lg border border-slate-200 p-3"><p className="text-xs text-slate-500">المصاريف</p><p className="text-lg font-bold text-red-600">{financeAnalytics.totalExpenses.toLocaleString()}</p></div>
+            <div className="rounded-lg border border-slate-200 p-3"><p className="text-xs text-slate-500">وارد</p><p className="text-lg font-bold text-emerald-700">{financeAnalytics.cashIn.toLocaleString()}</p></div>
+            <div className="rounded-lg border border-slate-200 p-3"><p className="text-xs text-slate-500">صادر</p><p className="text-lg font-bold text-orange-700">{financeAnalytics.cashOut.toLocaleString()}</p></div>
+            <div className="rounded-lg border border-slate-200 p-3"><p className="text-xs text-slate-500">المرتجعات</p><p className="text-lg font-bold text-red-700">{financeAnalytics.totalReturns.toLocaleString()}</p></div>
+            <div className="rounded-lg border border-slate-200 p-3"><p className="text-xs text-slate-500">نسبة التحصيل</p><p className="text-lg font-bold text-blue-700">{financeAnalytics.collectionRate}%</p></div>
+            <div className="rounded-lg border border-slate-200 p-3"><p className="text-xs text-slate-500">صافي الحركة</p><p className="text-lg font-bold text-violet-700">{financeAnalytics.netFlow.toLocaleString()}</p></div>
           </div>
         </DynamicCard.Content>
       </DynamicCard>
