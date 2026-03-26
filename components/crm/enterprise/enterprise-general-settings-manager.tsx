@@ -302,16 +302,7 @@ const defaultPages: PageRule[] = [
       { id: "ret_c_actions", key: "actions", label: "الإجراءات", isRequired: false, isVisible: true },
     ],
   },
-  {
-    id: "page_opportunities",
-    slug: "opportunities",
-    title: "CRM - الفرص البيعية",
-    description: "صفحة إدارة الفرص البيعية.",
-    isEnabled: true,
-    showInNavigation: true,
-    fields: [],
-    tableColumns: [],
-  },
+
   {
     id: "page_tasks",
     slug: "tasks",
@@ -319,26 +310,29 @@ const defaultPages: PageRule[] = [
     description: "صفحة إدارة المهام.",
     isEnabled: true,
     showInNavigation: true,
-    fields: [],
-    tableColumns: [],
-  },
-  {
-    id: "page_settings",
-    slug: "settings",
-    title: "CRM - الإعدادات العامة",
-    description: "إعدادات CRM المتقدم.",
-    isEnabled: true,
-    showInNavigation: true,
-    fields: [],
-    tableColumns: [],
+    fields: [
+      { id: "tsk_f_title", key: "title", label: "عنوان المهمة", type: "text", isRequired: true, isVisible: true },
+      { id: "tsk_f_assignee", key: "assignee", label: "المسؤول", type: "select", isRequired: true, isVisible: true },
+      { id: "tsk_f_priority", key: "priority", label: "الأولوية", type: "select", isRequired: false, isVisible: true },
+      { id: "tsk_f_status", key: "status", label: "الحالة", type: "select", isRequired: false, isVisible: true },
+      { id: "tsk_f_dueDate", key: "dueDate", label: "موعد التسليم", type: "date", isRequired: false, isVisible: true },
+    ],
+    tableColumns: [
+      { id: "tsk_c_title", key: "title", label: "المهمة", isRequired: true, isVisible: true },
+      { id: "tsk_c_assignee", key: "assignee", label: "المسؤول", isRequired: true, isVisible: true },
+      { id: "tsk_c_priority", key: "priority", label: "الأولوية", isRequired: false, isVisible: true },
+      { id: "tsk_c_status", key: "status", label: "الحالة", isRequired: false, isVisible: true },
+      { id: "tsk_c_dueDate", key: "dueDate", label: "الموعد", isRequired: false, isVisible: true },
+    ],
   },
 ];
 
 /**
  * Merges defaults with saved settings to add newly introduced pages/fields.
+ * Only pages present in defaultPages are kept — removed pages are discarded.
+ * Empty saved fields/columns arrays fall back to the new defaults.
  */
 function mergeWithDefaults(input: WebsiteGeneralSettings): WebsiteGeneralSettings {
-  const defaultBySlug = Object.fromEntries(defaultPages.map((page) => [page.slug, page]));
   const inputBySlug = Object.fromEntries((input.pages ?? []).map((page) => [page.slug, page]));
 
   const mergedPages = defaultPages.map((defaultPage) => {
@@ -350,16 +344,16 @@ function mergeWithDefaults(input: WebsiteGeneralSettings): WebsiteGeneralSetting
     return {
       ...defaultPage,
       ...saved,
-      fields: Array.isArray(saved.fields) ? saved.fields : defaultPage.fields,
-      tableColumns: Array.isArray(saved.tableColumns) ? saved.tableColumns : defaultPage.tableColumns,
+      // Use saved fields only when they are non-empty; otherwise fall back to defaults
+      // so newly added default fields become visible in existing installations.
+      fields: Array.isArray(saved.fields) && saved.fields.length > 0 ? saved.fields : defaultPage.fields,
+      tableColumns: Array.isArray(saved.tableColumns) && saved.tableColumns.length > 0 ? saved.tableColumns : defaultPage.tableColumns,
     };
   });
 
-  const extraPages = (input.pages ?? []).filter((page) => !defaultBySlug[page.slug]);
-
   return {
     sections: Array.isArray(input.sections) && input.sections.length > 0 ? input.sections : defaultSections,
-    pages: [...mergedPages, ...extraPages],
+    pages: mergedPages,
     updatedAt: input.updatedAt || new Date().toISOString(),
   };
 }
